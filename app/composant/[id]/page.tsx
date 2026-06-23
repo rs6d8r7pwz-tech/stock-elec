@@ -154,7 +154,7 @@ export default function FicheComposant() {
               ))}
               <div className="col-span-2">
                 <label className="text-xs font-medium block mb-1 flex items-center gap-1" style={{ color: 'var(--gray)' }}>
-                  Emplacement <HelpCircle className="w-3 h-3" title="Où est physiquement stocké ce composant ?" />
+                  Emplacement <span title="Où est physiquement stocké ce composant ?"><HelpCircle className="w-3 h-3" /></span>
                 </label>
                 <input
                   value={form.storage_location || ''}
@@ -235,9 +235,6 @@ function Info({ label, value, aide }: { label: string; value: React.ReactNode; a
     <div>
       <p className="text-xs font-medium flex items-center gap-1 mb-0.5" style={{ color: 'var(--gray)' }}>
         {label}
-        {aide && <HelpCircle className="w-3 h-3" title={aide} />}
+        {aide && <span title={aide}><HelpCircle className="w-3 h-3" /></span>}
       </p>
-      <p className="text-sm">{value}</p>
-    </div>
-  )
-}
+      <p className="text-sm">{va
