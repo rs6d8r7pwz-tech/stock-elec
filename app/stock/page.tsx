@@ -1,143 +1,179 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Composant } from '@/lib/types'
 import SearchBar from '@/components/SearchBar'
-import StockAdjuster from '@/components/StockAdjuster'
-import { ExternalLink, HelpCircle, Plus } from 'lucide-react'
+import { Package, AlertTriangle, Clock, ShoppingCart } from 'lucide-react'
 
-export default function PageStock() {
+export default function Dashboard() {
   const [composants, setComposants] = useState<Composant[]>([])
   const [recherche, setRecherche] = useState('')
   const [loading, setLoading] = useState(true)
 
-  const charger = useCallback(async () => {
-    const { data } = await supabase
-      .from('components')
-      .select('*')
-      .order('name')
-    setComposants(data || [])
-    setLoading(false)
+  useEffect(() => {
+    async function charger() {
+      const { data } = await supabase
+        .from('components')
+        .select('*')
+        .order('name')
+      setComposants(data || [])
+      setLoading(false)
+    }
+    charger()
   }, [])
 
-  useEffect(() => { charger() }, [charger])
-
-  const filtres = composants.filter(c =>
+  const enAlerte = composants.filter(c => c.quantity < c.threshold)
+  const resultats = composants.filter(c =>
     recherche === '' ||
     c.name.toLowerCase().includes(recherche.toLowerCase()) ||
     (c.component_type || '').toLowerCase().includes(recherche.toLowerCase()) ||
-    (c.reference || '').toLowerCase().includes(recherche.toLowerCase()) ||
-    (c.storage_location || '').toLowerCase().includes(recherche.toLowerCase())
+    (c.reference || '').toLowerCase().includes(recherche.toLowerCase())
   )
 
-  function majQte(id: string, newQty: number) {
-    setComposants(prev => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c))
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>Stock complet</h1>
-          <p className="text-sm" style={{ color: 'var(--gray)' }}>{composants.length} référence{composants.length > 1 ? 's' : ''}</p>
-        </div>
-        <Link
-          href="/composant/nouveau"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-          style={{ backgroundColor: 'var(--blue)' }}
-        >
-          <Plus className="w-4 h-4" />
-          Ajouter
-        </Link>
+    <div className="space-y-6">
+      {/* En-tête */}
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>Tableau de bord</h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--gray)' }}>Vue d&apos;ensemble du stock de matériel électrique</p>
       </div>
 
-      <SearchBar
-        value={recherche}
-        onChange={setRecherche}
-        placeholder="Rechercher par nom, type (ex: disjoncteur, contacteur), référence…"
-      />
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard
+          icon={<Package className="w-6 h-6" />}
+          label="Références"
+          value={composants.length}
+          color="var(--blue)"
+          href="/stock/inventaire"
+        />
+        <StatCard
+          icon={<AlertTriangle className="w-6 h-6" />}
+          label="En alerte"
+          value={enAlerte.length}
+          color={enAlerte.length > 0 ? 'var(--danger)' : 'var(--success)'}
+          href="/stock/alertes"
+        />
+        <StatCard
+          icon={<ShoppingCart className="w-6 h-6" />}
+          label="À commander"
+          value={enAlerte.length}
+          color="var(--warning)"
+          href="/stock/commande"
+        />
+        <StatCard
+          icon={<Clock className="w-6 h-6" />}
+          label="Historique"
+          value="→"
+          color="var(--gray)"
+          href="/stock/historique"
+        />
+      </div>
 
-      {loading ? (
-        <p className="text-center py-8" style={{ color: 'var(--gray)' }}>Chargement…</p>
-      ) : filtres.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-          <p style={{ color: 'var(--gray)' }}>{recherche ? `Aucun résultat pour « ${recherche} »` : 'Aucun composant enregistré.'}</p>
-          {!recherche && (
-            <Link href="/composant/nouveau" className="mt-3 inline-block text-sm font-medium" style={{ color: 'var(--blue)' }}>
-              Ajouter le premier composant →
-            </Link>
-          )}
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ backgroundColor: 'var(--blue)', color: 'white' }}>
-                <th className="text-left px-4 py-3 font-semibold">Désignation</th>
-                <th className="text-left px-4 py-3 font-semibold hidden md:table-cell">Type</th>
-                <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell">Référence</th>
-                <th className="text-left px-4 py-3 font-semibold hidden md:table-cell">
-                  <span className="flex items-center gap-1">
-                    Emplacement
-                    <span title="Indiquer où le composant est physiquement stocké (ex: Étagère A / Bac 3)">
-                      <HelpCircle className="w-3.5 h-3.5 opacity-70" />
-                    </span>
-                  </span>
-                </th>
-                <th className="text-center px-4 py-3 font-semibold">Seuil</th>
-                <th className="text-center px-4 py-3 font-semibold">Quantité</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtres.map((c, i) => {
-                const alerte = c.quantity < c.threshold
-                return (
-                  <tr
-                    key={c.id}
-                    className="border-t hover:bg-gray-50 transition-colors"
-                    style={{ borderColor: 'var(--border)', backgroundColor: i % 2 === 0 ? 'white' : 'var(--bg)' }}
+      {/* Recherche rapide */}
+      <div className="bg-white rounded-xl p-5 shadow-sm border" style={{ borderColor: 'var(--border)' }}>
+        <h2 className="font-semibold mb-3" style={{ color: 'var(--text)' }}>Recherche rapide</h2>
+        <SearchBar
+          value={recherche}
+          onChange={setRecherche}
+          placeholder="Rechercher par nom, type (ex: disjoncteur), référence…"
+        />
+
+        {recherche && (
+          <div className="mt-3 space-y-2">
+            {loading ? (
+              <p className="text-sm" style={{ color: 'var(--gray)' }}>Chargement…</p>
+            ) : resultats.length === 0 ? (
+              <p className="text-sm" style={{ color: 'var(--gray)' }}>Aucun résultat pour « {recherche} »</p>
+            ) : (
+              resultats.slice(0, 8).map(c => (
+                <Link
+                  key={c.id}
+                  href={`/stock/composant/${c.id}`}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors border"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <div>
+                    <span className="font-medium text-sm">{c.name}</span>
+                    {c.component_type && (
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--blue-light)', color: 'var(--blue)' }}>
+                        {c.component_type}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className="font-bold text-sm"
+                    style={{ color: c.quantity < c.threshold ? 'var(--danger)' : 'var(--success)' }}
                   >
-                    <td className="px-4 py-3">
-                      <Link href={`/composant/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>
-                        {c.name}
-                      </Link>
-                      {alerte && (
-                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded font-bold" style={{ backgroundColor: '#fee2e2', color: 'var(--danger)' }}>
-                          ALERTE
-                        </span>
-                      )}
-                      {c.url && (
-                        <a href={c.url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex" title="Voir le produit">
-                          <ExternalLink className="w-3.5 h-3.5" style={{ color: 'var(--blue)' }} />
-                        </a>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      {c.component_type && (
-                        <span className="px-2 py-0.5 rounded-full text-xs" style={{ backgroundColor: 'var(--blue-light)', color: 'var(--blue)' }}>
-                          {c.component_type}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell" style={{ color: 'var(--gray)' }}>{c.reference || '—'}</td>
-                    <td className="px-4 py-3 hidden md:table-cell text-xs" style={{ color: 'var(--gray)' }}>{c.storage_location || '—'}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: 'var(--gray)' }}>{c.threshold}</td>
-                    <td className="px-4 py-3">
-                      <StockAdjuster composant={c} onUpdate={(qty) => majQte(c.id, qty)} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link href={`/composant/${c.id}`} className="text-xs" style={{ color: 'var(--blue)' }}>Détail</Link>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                    {c.quantity} unité{c.quantity > 1 ? 's' : ''}
+                  </span>
+                </Link>
+              ))
+            )}
+            {resultats.length > 8 && (
+              <Link href={`/stock/inventaire?q=${encodeURIComponent(recherche)}`} className="text-sm" style={{ color: 'var(--blue)' }}>
+                Voir les {resultats.length} résultats →
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Alertes rapides */}
+      {enAlerte.length > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-sm border" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold flex items-center gap-2" style={{ color: 'var(--danger)' }}>
+              <AlertTriangle className="w-5 h-5" />
+              {enAlerte.length} article{enAlerte.length > 1 ? 's' : ''} sous le seuil
+            </h2>
+            <Link href="/stock/alertes" className="text-sm font-medium" style={{ color: 'var(--blue)' }}>Voir tout →</Link>
+          </div>
+          <div className="space-y-2">
+            {enAlerte.slice(0, 5).map(c => (
+              <div key={c.id} className="flex items-center justify-between text-sm">
+                <span>{c.name}</span>
+                <span style={{ color: 'var(--danger)' }} className="font-semibold">
+                  {c.quantity} / seuil {c.threshold}
+                </span>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/stock/commande"
+            className="mt-4 block w-full text-center py-2 rounded-lg font-semibold text-white text-sm transition-colors"
+            style={{ backgroundColor: 'var(--blue)' }}
+          >
+            📄 Générer un bon de commande
+          </Link>
         </div>
       )}
     </div>
+  )
+}
+
+function StatCard({
+  icon, label, value, color, href
+}: {
+  icon: React.ReactNode
+  label: string
+  value: number | string
+  color: string
+  href: string
+}) {
+  return (
+    <Link href={href} className="bg-white rounded-xl p-4 shadow-sm border hover:shadow-md transition-shadow" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center gap-3">
+        <div className="p-2 rounded-lg" style={{ backgroundColor: 'var(--blue-light)', color }}>
+          {icon}
+        </div>
+        <div>
+          <p className="text-xs" style={{ color: 'var(--gray)' }}>{label}</p>
+          <p className="text-xl font-bold" style={{ color }}>{value}</p>
+        </div>
+      </div>
+    </Link>
   )
 }

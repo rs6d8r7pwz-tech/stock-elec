@@ -40,7 +40,7 @@ export default function NouveauComposant() {
       notes: form.notes.trim() || null,
     })
     if (error) { setErreur(error.message); setLoading(false); return }
-    router.push('/stock')
+    router.push('/stock/inventaire')
   }
 
   return (

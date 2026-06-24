@@ -1,20 +1,20 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import Navbar from '@/components/Navbar'
+import AuthProvider from '@/components/AuthProvider'
+import Shell from '@/components/Shell'
 
 export const metadata: Metadata = {
-  title: 'Stock Électrique — Electreau',
-  description: 'Gestion de stock de matériel électrique',
+  title: 'Portail Electreau',
+  description: 'Portail entreprise Electreau — bons d\'intervention, gestion de stock',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
       <body>
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-4 py-6">
-          {children}
-        </main>
+        <AuthProvider>
+          <Shell>{children}</Shell>
+        </AuthProvider>
       </body>
     </html>
   )

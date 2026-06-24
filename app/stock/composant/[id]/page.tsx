@@ -53,7 +53,7 @@ export default function FicheComposant() {
     if (!composant) return
     if (!confirm(`Supprimer « ${composant.name} » et tout son historique ?`)) return
     await supabase.from('components').delete().eq('id', composant.id)
-    router.push('/stock')
+    router.push('/stock/inventaire')
   }
 
   if (loading) return <p className="text-center py-12" style={{ color: 'var(--gray)' }}>Chargement…</p>
@@ -237,4 +237,7 @@ function Info({ label, value, aide }: { label: string; value: React.ReactNode; a
         {label}
         {aide && <span title={aide}><HelpCircle className="w-3 h-3" /></span>}
       </p>
-      <p className="text-sm">{va
+      <p className="text-sm">{value}</p>
+    </div>
+  )
+}

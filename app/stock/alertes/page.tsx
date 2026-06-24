@@ -41,7 +41,7 @@ export default function PageAlertes() {
           </p>
         </div>
         <Link
-          href="/commande"
+          href="/stock/commande"
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
           style={{ backgroundColor: 'var(--blue)' }}
         >
@@ -55,7 +55,7 @@ export default function PageAlertes() {
       ) : composants.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border" style={{ borderColor: 'var(--border)' }}>
           <p className="text-green-600 font-semibold">✅ Tout le stock est au-dessus des seuils !</p>
-          <Link href="/stock" className="mt-2 inline-block text-sm" style={{ color: 'var(--blue)' }}>← Retour au stock</Link>
+          <Link href="/stock/inventaire" className="mt-2 inline-block text-sm" style={{ color: 'var(--blue)' }}>← Retour au stock</Link>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
@@ -81,7 +81,7 @@ export default function PageAlertes() {
                     style={{ borderColor: 'var(--border)', backgroundColor: i % 2 === 0 ? '#fff5f5' : 'white' }}
                   >
                     <td className="px-4 py-3">
-                      <Link href={`/composant/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>
+                      <Link href={`/stock/composant/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>
                         {c.name}
                       </Link>
                     </td>

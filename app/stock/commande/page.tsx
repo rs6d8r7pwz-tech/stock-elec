@@ -75,7 +75,7 @@ export default function PageCommande() {
       const pageW = doc.internal.pageSize.getWidth()
 
       // ── En-tête ──
-      doc.setFillColor(30, 80, 160) // #1e50a0
+      doc.setFillColor(22, 41, 74) // navy Electreau #16294a
       doc.rect(0, 0, pageW, 28, 'F')
 
       doc.setTextColor(255, 255, 255)
@@ -95,7 +95,7 @@ export default function PageCommande() {
       doc.text(`Généré le ${dateStr}`, pageW - 14, 19, { align: 'right' })
 
       // ── Ligne séparatrice ──
-      doc.setDrawColor(198, 216, 245) // #c8d8f5
+      doc.setDrawColor(212, 45, 40) // rouge Electreau #d42d28
       doc.setLineWidth(0.5)
       doc.line(14, 31, pageW - 14, 31)
 
@@ -116,13 +116,13 @@ export default function PageCommande() {
         body: rows,
         styles: { fontSize: 9, cellPadding: 3 },
         headStyles: {
-          fillColor: [30, 80, 160],
+          fillColor: [22, 41, 74],
           textColor: [255, 255, 255],
           fontStyle: 'bold',
         },
-        alternateRowStyles: { fillColor: [232, 240, 251] }, // #e8f0fb
+        alternateRowStyles: { fillColor: [224, 245, 251] }, // bleu eau #e0f5fb
         columnStyles: {
-          5: { fontStyle: 'bold', textColor: [30, 80, 160], halign: 'center' }, // Qté à commander
+          5: { fontStyle: 'bold', textColor: [212, 45, 40], halign: 'center' }, // Qté à commander (rouge)
           3: { halign: 'center' },
           4: { halign: 'center' },
         },
@@ -145,7 +145,7 @@ export default function PageCommande() {
       if (finalY < doc.internal.pageSize.getHeight() - 20) {
         doc.setFontSize(10)
         doc.setFont('helvetica', 'bold')
-        doc.setTextColor(30, 80, 160)
+        doc.setTextColor(22, 41, 74)
         const total = lignes.reduce((s, l) => s + l.quantite_a_commander, 0)
         doc.text(`Total : ${lignes.length} référence${lignes.length > 1 ? 's' : ''} — ${total} pièce${total > 1 ? 's' : ''} à commander`, 14, finalY)
       }

@@ -1,63 +1,68 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-
-const liens = [
-  { href: '/', label: 'Tableau de bord' },
-  { href: '/stock', label: 'Stock' },
-  { href: '/alertes', label: 'Alertes' },
-  { href: '/commande', label: 'Commande PDF' },
-  { href: '/historique', label: 'Historique' },
-]
+import { useAuth } from '@/components/AuthProvider'
+import { appsFor } from '@/lib/apps'
+import { LogOut } from 'lucide-react'
 
 export default function Navbar() {
   const pathname = usePathname()
+  const { user, logout } = useAuth()
+  const apps = appsFor(user)
 
   return (
-    <nav style={{ backgroundColor: 'var(--blue)' }} className="shadow-md">
+    <nav className="shadow-md" style={{ backgroundColor: 'var(--navy)' }}>
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/" className="flex flex-col">
-            <span className="text-white font-black text-xl tracking-widest">
-              ⚡ ELECTREAU
-            </span>
-            <span className="text-white/70 text-xs tracking-wide">Gestion de stock</span>
+        <div className="flex items-center justify-between h-16 gap-4">
+          {/* Logo -> accueil */}
+          <Link href="/" className="flex items-center shrink-0 bg-white rounded-md px-2.5 py-1.5">
+            <Image src="/logo-electreau.png" alt="Electreau" width={150} height={31}
+              style={{ height: '26px', width: 'auto' }} priority />
           </Link>
 
-          {/* Navigation */}
-          <div className="hidden md:flex items-center gap-1">
-            {liens.map((lien) => {
-              const actif = pathname === lien.href
+          {/* Applis accessibles */}
+          <div className="hidden md:flex items-center gap-1 flex-1">
+            {apps.map((app) => {
+              const actif = pathname === app.href || pathname.startsWith(app.href + '/')
               return (
                 <Link
-                  key={lien.href}
-                  href={lien.href}
+                  key={app.id}
+                  href={app.href}
                   className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
-                    actif
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/80 hover:text-white hover:bg-white/10'
+                    actif ? 'bg-white/20 text-white' : 'text-white/80 hover:text-white hover:bg-white/10'
                   }`}
                 >
-                  {lien.label}
+                  <span className="mr-1">{app.emoji}</span>{app.label}
                 </Link>
               )
             })}
-            <Link
-              href="/composant/nouveau"
-              className="ml-3 px-4 py-2 rounded text-sm font-semibold text-white border border-white/40 hover:bg-white/10 transition-colors"
-            >
-              + Composant
-            </Link>
           </div>
 
-          {/* Mobile: liens simplifiés */}
-          <div className="md:hidden flex gap-2">
-            <Link href="/stock" className="text-white/80 hover:text-white text-sm px-2 py-1">Stock</Link>
-            <Link href="/alertes" className="text-white/80 hover:text-white text-sm px-2 py-1">Alertes</Link>
-            <Link href="/commande" className="text-white/80 hover:text-white text-sm px-2 py-1">PDF</Link>
+          {/* Utilisateur + déconnexion */}
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="hidden sm:block text-white/80 text-sm">{user}</span>
+            <button
+              onClick={() => logout()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium text-white border border-white/30 hover:bg-white/10 transition-colors"
+              title="Se déconnecter"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Déconnexion</span>
+            </button>
           </div>
+        </div>
+
+        {/* Applis accessibles — version mobile */}
+        <div className="md:hidden flex gap-1 pb-2 -mt-1 overflow-x-auto">
+          {apps.map((app) => (
+            <Link key={app.id} href={app.href}
+              className="px-2.5 py-1 rounded text-xs font-medium text-white/85 hover:text-white whitespace-nowrap"
+              style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+              {app.emoji} {app.label}
+            </Link>
+          ))}
         </div>
       </div>
     </nav>

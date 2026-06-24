@@ -3,18 +3,26 @@
 @tailwind utilities;
 
 :root {
-  --blue: #1e50a0;
-  --blue-dark: #163a7a;
-  --blue-light: #e8f0fb;
-  --blue-mid: #c8d8f5;
-  --text: #1a1a2e;
+  /* Charte Electreau (extraite de l'app bon-intervention) */
+  --navy: #16294a;
+  --navy-light: #223d6e;
+  --red: #d42d28;
+  --red-dark: #a81f1a;
+
+  /* Couleur primaire de l'app = marine Electreau (en-têtes, navbar, accents) */
+  --blue: #16294a;        /* alias primaire -> navy */
+  --blue-dark: #0f1d36;
+  --blue-light: #e0f5fb;  /* bleu eau clair */
+  --blue-mid: #99d9ef;
+
+  --text: #1a2636;
   --gray: #6b7280;
-  --border: #d1d5db;
+  --border: #e2e8f0;
   --success: #16a34a;
   --danger: #dc2626;
   --warning: #d97706;
   --white: #ffffff;
-  --bg: #f5f7fc;
+  --bg: #f0f4f8;
 }
 
 body {
