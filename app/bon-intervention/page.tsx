@@ -4,21 +4,24 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { canAccess } from '@/lib/apps'
+import AccesBloque from '@/components/AccesBloque'
 
 export default function PageBonIntervention() {
   const { user, ready } = useAuth()
   const router = useRouter()
-  const [autorise, setAutorise] = useState(false)
+  const [etat, setEtat] = useState<'load' | 'ok' | 'bloque'>('load')
 
   useEffect(() => {
     if (!ready) return
     if (!user) { router.replace('/login'); return }
-    if (!canAccess(user, 'bon_intervention')) { router.replace('/'); return }
-    setAutorise(true)
+    setEtat(canAccess(user, 'bon_intervention') ? 'ok' : 'bloque')
   }, [ready, user, router])
 
-  if (!autorise) {
+  if (etat === 'load') {
     return <p className="text-center py-10" style={{ color: 'var(--gray)' }}>Chargement…</p>
+  }
+  if (etat === 'bloque') {
+    return <AccesBloque app="Bon d'intervention" />
   }
 
   // L'app Bon Intervention est servie sous le même domaine (même session).

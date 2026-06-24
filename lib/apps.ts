@@ -39,25 +39,26 @@ export const APPS: AppDef[] = [
 
 /**
  * Droits d'accès par compte.
- * - Le compte de direction (Gestion ELECTREAU) voit toutes les applis.
- * - Les autres comptes : liste explicite ci-dessous.
- * Par défaut (compte non listé), accès à toutes les applis pour ne bloquer
- * personne pendant le déploiement — à restreindre une fois les rôles définis.
- *
- * NB : étape suivante prévue = stocker ces droits dans Supabase + écran admin
- * pour que la direction les gère sans toucher au code.
+ * - Gestion ELECTREAU (direction) voit toutes les applis.
+ * - Stock : Gestion, Romain Durand, Jerome Boulud, Richard Marrel.
+ * - Bon Intervention : tout le monde SAUF Richard Marrel.
+ * - Un compte non listé n'a accès à rien (sécurité par défaut).
  */
 const ACCESS: Record<string, string[]> = {
-  // Exemple de restriction (à ajuster) :
-  // 'Maxime Morel': ['stock'],
-  // 'Loic Jaquet': ['bon_intervention'],
+  'Romain Durand':    ['bon_intervention', 'stock'],
+  'Jerome Boulud':    ['bon_intervention', 'stock'],
+  'Richard Marrel':   ['stock'],
+  'François Armanet': ['bon_intervention'],
+  'Loic Jaquet':      ['bon_intervention'],
+  'Maxime Morel':     ['bon_intervention'],
+  'Bastien Brochier': ['bon_intervention'],
+  'Richard Besson':   ['bon_intervention'],
 }
 
 export function appsFor(nom: string | null): AppDef[] {
   if (!nom) return []
   if (nom === COMPTE_GESTION) return APPS // direction = accès complet
-  const allowed = ACCESS[nom]
-  if (!allowed) return APPS // défaut : tout, le temps du déploiement
+  const allowed = ACCESS[nom] || [] // non listé = aucun accès
   return APPS.filter((a) => allowed.includes(a.id))
 }
 

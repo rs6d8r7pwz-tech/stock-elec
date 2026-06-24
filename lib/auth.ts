@@ -23,6 +23,7 @@ export const TECHNICIENS = [
   'Jerome Boulud',
   'Bastien Brochier',
   'Richard Besson',
+  'Richard Marrel',
 ]
 
 export const COMPTES = [...TECHNICIENS, COMPTE_GESTION]
@@ -53,17 +54,24 @@ export async function authLogin(nom: string, pwd: string): Promise<boolean> {
 
 // ── Session (localStorage, partagée sur le même domaine) ────────────────────
 
+// Source de vérité de la session = sessionStorage : il est effacé quand l'onglet/
+// le navigateur est fermé → l'utilisateur doit se reconnecter. Un rechargement de
+// l'onglet conserve la session. On garde un miroir dans localStorage pour que
+// l'app Bon Intervention (servie en iframe, même origine) retrouve l'utilisateur.
 export function sessionLoad(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem(SESSION_KEY)
+  return sessionStorage.getItem(SESSION_KEY)
 }
 
 export function sessionSave(nom: string) {
-  localStorage.setItem(SESSION_KEY, nom)
+  sessionStorage.setItem(SESSION_KEY, nom)
+  localStorage.setItem(SESSION_KEY, nom) // miroir pour l'iframe Bon Intervention
   touchSession()
 }
 
 export function sessionClear() {
+  if (typeof window === 'undefined') return
+  sessionStorage.removeItem(SESSION_KEY)
   localStorage.removeItem(SESSION_KEY)
   localStorage.removeItem(SESSION_TS_KEY)
 }

@@ -2,6 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/components/AuthProvider'
+import { canAccess } from '@/lib/apps'
+import AccesBloque from '@/components/AccesBloque'
 
 const onglets = [
   { href: '/stock', label: 'Tableau de bord', exact: true },
@@ -14,6 +17,12 @@ const onglets = [
 
 export default function StockLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const { user } = useAuth()
+
+  if (user && !canAccess(user, 'stock')) {
+    return <AccesBloque app="Gestion de stock" />
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex gap-1 overflow-x-auto border-b" style={{ borderColor: 'var(--border)' }}>
