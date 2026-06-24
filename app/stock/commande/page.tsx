@@ -1,18 +1,23 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { Composant, LigneCommande } from '@/lib/types'
+import { Composant, LigneCommande, CommandeLine } from '@/lib/types'
+import { genererCommandePdf } from '@/lib/commandePdf'
+import { useAuth } from '@/components/AuthProvider'
 import SearchBar from '@/components/SearchBar'
-import { FileDown, Plus, Trash2, ShoppingCart } from 'lucide-react'
+import { FileDown, Plus, Trash2, ShoppingCart, CheckCircle } from 'lucide-react'
 
 export default function PageCommande() {
+  const { user } = useAuth()
   const [lignes, setLignes] = useState<LigneCommande[]>([])
   const [loading, setLoading] = useState(true)
   const [recherche, setRecherche] = useState('')
   const [suggestions, setSuggestions] = useState<Composant[]>([])
   const [tousComposants, setTousComposants] = useState<Composant[]>([])
   const [generatingPdf, setGeneratingPdf] = useState(false)
+  const [enregistre, setEnregistre] = useState('')
 
   // Charger les alertes + tous les composants pour la recherche
   const charger = useCallback(async () => {
@@ -66,94 +71,33 @@ export default function PageCommande() {
     if (lignes.length === 0) return
     setGeneratingPdf(true)
     try {
-      const { default: jsPDF } = await import('jspdf')
-      const { default: autoTable } = await import('jspdf-autotable')
-
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const now = new Date()
-      const dateStr = now.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      const pageW = doc.internal.pageSize.getWidth()
-
-      // ── En-tête ──
-      doc.setFillColor(22, 41, 74) // navy Electreau #16294a
-      doc.rect(0, 0, pageW, 28, 'F')
-
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(20)
-      doc.setFont('helvetica', 'bold')
-      doc.text('⚡ ELECTREAU', 14, 12)
-
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      doc.text('Gestion de stock électrique', 14, 19)
-
-      doc.setFontSize(16)
-      doc.setFont('helvetica', 'bold')
-      doc.text('BON DE COMMANDE', pageW - 14, 12, { align: 'right' })
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`Généré le ${dateStr}`, pageW - 14, 19, { align: 'right' })
-
-      // ── Ligne séparatrice ──
-      doc.setDrawColor(212, 45, 40) // rouge Electreau #d42d28
-      doc.setLineWidth(0.5)
-      doc.line(14, 31, pageW - 14, 31)
-
-      // ── Tableau ──
-      const rows = lignes.map(l => [
-        l.composant.name,
-        l.composant.component_type || '—',
-        l.composant.reference || '—',
-        String(l.composant.quantity),
-        String(l.composant.threshold),
-        String(l.quantite_a_commander),
-        l.composant.url ? l.composant.url.replace(/^https?:\/\//, '').substring(0, 40) : '—',
-      ])
-
-      autoTable(doc, {
-        startY: 35,
-        head: [['Désignation', 'Type', 'Référence', 'Stock actuel', 'Seuil', 'Qté à commander', 'Lien / URL']],
-        body: rows,
-        styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: {
-          fillColor: [22, 41, 74],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-        },
-        alternateRowStyles: { fillColor: [224, 245, 251] }, // bleu eau #e0f5fb
-        columnStyles: {
-          5: { fontStyle: 'bold', textColor: [212, 45, 40], halign: 'center' }, // Qté à commander (rouge)
-          3: { halign: 'center' },
-          4: { halign: 'center' },
-        },
-        // Pied de page
-        didDrawPage: (data) => {
-          const pageCount = doc.getNumberOfPages()
-          doc.setFontSize(8)
-          doc.setTextColor(107, 114, 128)
-          doc.text(
-            `Electreau — Bon de commande du ${dateStr} — Page ${data.pageNumber}/${pageCount}`,
-            pageW / 2,
-            doc.internal.pageSize.getHeight() - 8,
-            { align: 'center' }
-          )
-        },
+      const ref = 'CMD-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' +
+        Math.random().toString(36).slice(2, 6).toUpperCase()
+      const lines: CommandeLine[] = lignes.map((l) => ({
+        component_id: l.composant.id,
+        name: l.composant.name,
+        component_type: l.composant.component_type,
+        reference: l.composant.reference,
+        url: l.composant.url,
+        quantity: l.quantite_a_commander,
+        stock: l.composant.quantity,
+        threshold: l.composant.threshold,
+      }))
+      // 1) Enregistrer la demande (partagée avec les autres comptes Stock)
+      const { error } = await supabase.from('purchase_orders').insert({
+        reference: ref,
+        status: 'a_commander',
+        lines,
+        total_pieces: totalPieces,
+        created_by: user || null,
       })
-
-      // ── Récap total ──
-      const finalY = (doc as any).lastAutoTable.finalY + 6
-      if (finalY < doc.internal.pageSize.getHeight() - 20) {
-        doc.setFontSize(10)
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor(22, 41, 74)
-        const total = lignes.reduce((s, l) => s + l.quantite_a_commander, 0)
-        doc.text(`Total : ${lignes.length} référence${lignes.length > 1 ? 's' : ''} — ${total} pièce${total > 1 ? 's' : ''} à commander`, 14, finalY)
-      }
-
-      doc.save(`bon-commande-electreau-${now.toISOString().slice(0, 10)}.pdf`)
+      if (error) throw error
+      // 2) Générer + télécharger le PDF
+      await genererCommandePdf(lines, { reference: ref })
+      setEnregistre(ref)
     } catch (e) {
-      console.error('Erreur génération PDF', e)
-      alert('Erreur lors de la génération du PDF.')
+      console.error('Erreur demande achat', e)
+      alert("Erreur lors de l'enregistrement / génération de la demande.")
     }
     setGeneratingPdf(false)
   }
@@ -162,6 +106,16 @@ export default function PageCommande() {
 
   return (
     <div className="space-y-5">
+      {enregistre && (
+        <div className="flex items-start gap-2 p-3 rounded-lg text-sm" style={{ background: '#dcfce7', color: '#166534' }}>
+          <CheckCircle className="w-5 h-5 mt-0.5 shrink-0" />
+          <span>
+            Demande <strong>{enregistre}</strong> enregistrée et partagée. PDF téléchargé.{' '}
+            <Link href="/stock/demandes" className="underline font-semibold">Voir les demandes d&apos;achat →</Link>
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: 'var(--text)' }}>

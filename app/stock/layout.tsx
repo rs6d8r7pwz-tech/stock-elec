@@ -11,6 +11,7 @@ const onglets = [
   { href: '/stock/inventaire', label: 'Stock complet' },
   { href: '/stock/alertes', label: 'Alertes' },
   { href: '/stock/commande', label: 'Commande PDF' },
+  { href: '/stock/demandes', label: "Demandes d'achat" },
   { href: '/stock/historique', label: 'Historique' },
   { href: '/stock/composant/nouveau', label: '+ Composant' },
 ]
