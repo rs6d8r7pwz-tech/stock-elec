@@ -127,6 +127,13 @@ export default function PageNotesFrais() {
   // Suppression autorisée : Gestion toujours ; expéditeur seulement si encore "en attente"
   function peutSupprimer(n: NoteFrais) { return gestion || (n.sender === user && n.status === 'en_attente') }
 
+  // Ouvre le PDF via un lien temporaire (stockage privé)
+  async function voirPdf(n: NoteFrais) {
+    const { data } = await supabase.storage.from('notes-frais').createSignedUrl(n.pdf_path, 3600)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+    else alert("Impossible d'ouvrir le PDF.")
+  }
+
   const liste = notes.filter((n) => filtre === 'toutes' || n.status === filtre)
 
   return (
@@ -277,9 +284,9 @@ export default function PageNotesFrais() {
                   <p className="text-xs mt-0.5" style={{ color: 'var(--gray)' }}>Concerne : {n.concerned.join(', ')}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <a href={n.pdf_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border" style={{ borderColor: 'var(--border)', color: 'var(--navy)' }}>
+                  <button onClick={() => voirPdf(n)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border" style={{ borderColor: 'var(--border)', color: 'var(--navy)' }}>
                     <FileText className="w-4 h-4" /> PDF
-                  </a>
+                  </button>
                   {gestion && (n.status === 'en_attente' ? (
                     <button onClick={() => setStatut(n, 'classee')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white" style={{ background: 'var(--success)' }}>
                       <Check className="w-4 h-4" /> Classer

@@ -63,12 +63,16 @@ export default function CropScanModal({
     const img = imgRef.current!
     const sc = img.naturalWidth / disp.w // facteur affichage -> naturel
     const cw = Math.round(rect.w * sc), ch = Math.round(rect.h * sc)
+    // Redimensionne (max 1600 px sur le plus grand côté) : PDF léger et rapide, reste lisible
+    const MAX = 1600
+    const ds = Math.min(1, MAX / Math.max(cw, ch))
+    const ow = Math.max(1, Math.round(cw * ds)), oh = Math.max(1, Math.round(ch * ds))
     const canvas = document.createElement('canvas')
-    canvas.width = cw; canvas.height = ch
+    canvas.width = ow; canvas.height = oh
     const ctx = canvas.getContext('2d')!
-    ctx.drawImage(img, Math.round(rect.x * sc), Math.round(rect.y * sc), cw, ch, 0, 0, cw, ch)
+    ctx.drawImage(img, Math.round(rect.x * sc), Math.round(rect.y * sc), cw, ch, 0, 0, ow, oh)
     // Filtre scan : niveaux de gris + contraste
-    const id = ctx.getImageData(0, 0, cw, ch)
+    const id = ctx.getImageData(0, 0, ow, oh)
     const d = id.data
     const C = 1.45, inter = 128 * (1 - C)
     for (let i = 0; i < d.length; i += 4) {
