@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { NoteFrais } from '@/lib/types'
 import { useAuth } from '@/components/AuthProvider'
-import { COMPTES, COMPTE_GESTION } from '@/lib/auth'
+import { TECHNICIENS, COMPTE_GESTION } from '@/lib/auth'
 import CropScanModal from '@/components/CropScanModal'
 import { Receipt, Camera, Trash2, FileText, Check, Clock, X, Plus, Send } from 'lucide-react'
 
@@ -48,7 +48,8 @@ export default function PageNotesFrais() {
   const [filtre, setFiltre] = useState<'toutes' | 'en_attente' | 'classee'>('toutes')
 
   const [ouvert, setOuvert] = useState(false)
-  const [concerned, setConcerned] = useState<string[]>(user ? [user] : [])
+  const [concerned, setConcerned] = useState<string[]>(user && TECHNICIENS.includes(user) ? [user] : [])
+  const [customNom, setCustomNom] = useState('')
   const [montant, setMontant] = useState('')
   const [objet, setObjet] = useState('')
   const [pages, setPages] = useState<string[]>([])     // photos traitées (prêtes PDF)
@@ -71,6 +72,11 @@ export default function PageNotesFrais() {
 
   function toggleConcerned(nom: string) {
     setConcerned((p) => p.includes(nom) ? p.filter((n) => n !== nom) : [...p, nom])
+  }
+  function ajouterCustom() {
+    const n = customNom.trim()
+    if (n && !concerned.includes(n)) setConcerned((p) => [...p, n])
+    setCustomNom('')
   }
   async function onPhotos(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
@@ -98,7 +104,7 @@ export default function PageNotesFrais() {
         objet: objet || null, pdf_path: path, pdf_url: pub.publicUrl, status: 'en_attente',
       })
       if (insErr) throw insErr
-      setPages([]); setMontant(''); setObjet(''); setConcerned(user ? [user] : []); setLisible(false); setOuvert(false)
+      setPages([]); setMontant(''); setObjet(''); setConcerned(user && TECHNICIENS.includes(user) ? [user] : []); setCustomNom(''); setLisible(false); setOuvert(false)
       charger()
     } catch (e: any) {
       console.error(e); setErreur("Échec de l'envoi : " + (e?.message || 'erreur'))
@@ -154,18 +160,44 @@ export default function PageNotesFrais() {
         <div className="bg-white rounded-xl border p-4 space-y-4" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center justify-between">
             <h2 className="font-semibold" style={{ color: 'var(--navy)' }}>Nouvelle note de frais</h2>
-            <button onClick={() => { setOuvert(false); setPages([]); setQueue([]); setLisible(false); setErreur('') }}><X className="w-5 h-5" style={{ color: 'var(--gray)' }} /></button>
+            <button onClick={() => { setOuvert(false); setPages([]); setQueue([]); setLisible(false); setCustomNom(''); setErreur('') }}><X className="w-5 h-5" style={{ color: 'var(--gray)' }} /></button>
           </div>
 
           <div>
             <label className="text-sm font-medium" style={{ color: 'var(--text)' }}>Personnes concernées</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-              {COMPTES.map((c) => (
+              {TECHNICIENS.map((c) => (
                 <label key={c} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-lg border cursor-pointer"
                   style={{ borderColor: concerned.includes(c) ? 'var(--red)' : 'var(--border)', background: concerned.includes(c) ? '#fee2e2' : 'white' }}>
                   <input type="checkbox" checked={concerned.includes(c)} onChange={() => toggleConcerned(c)} /> {c}
                 </label>
               ))}
+            </div>
+
+            {/* Personnes ajoutées hors liste */}
+            {concerned.filter((c) => !TECHNICIENS.includes(c)).length > 0 && (
+              <div className="flex gap-2 flex-wrap mt-2">
+                {concerned.filter((c) => !TECHNICIENS.includes(c)).map((c) => (
+                  <span key={c} className="inline-flex items-center gap-1 text-sm px-2 py-1 rounded-full" style={{ background: '#fee2e2', color: 'var(--red)' }}>
+                    {c}
+                    <button type="button" onClick={() => toggleConcerned(c)}><X className="w-3 h-3" /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Ajouter une personne hors liste */}
+            <div className="flex gap-2 mt-2">
+              <input
+                value={customNom}
+                onChange={(e) => setCustomNom(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); ajouterCustom() } }}
+                placeholder="Ajouter une personne hors liste…"
+                className="flex-1 px-3 py-2 border rounded-lg text-sm" style={{ borderColor: 'var(--border)' }}
+              />
+              <button type="button" onClick={ajouterCustom} className="px-3 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: 'var(--border)', color: 'var(--navy)' }}>
+                Ajouter
+              </button>
             </div>
           </div>
 
