@@ -30,31 +30,23 @@ export default function StockAdjuster({ composant, onUpdate }: Props) {
     }
     setLoading(true)
     setErreur('')
-    const nouvelleQte = mouvement === 'in'
-      ? composant.quantity + qteFinale
-      : composant.quantity - qteFinale
-
-    const { error: errMvt } = await supabase.from('movements').insert({
-      component_id: composant.id,
-      movement_type: mouvement,
-      quantity: qteFinale,
-      person_name: nom || null,
-      chantier_ref: chantier || null,
+    // Ajustement atomique côté base (verrou + mouvement + contrôle stock négatif)
+    const delta = mouvement === 'in' ? qteFinale : -qteFinale
+    const { data, error } = await supabase.rpc('adjust_stock', {
+      p_id: composant.id,
+      p_delta: delta,
+      p_person: nom || null,
+      p_chantier: chantier || null,
     })
-
-    if (!errMvt) {
-      const { error: errQte } = await supabase
-        .from('components')
-        .update({ quantity: nouvelleQte })
-        .eq('id', composant.id)
-      if (!errQte) {
-        onUpdate(nouvelleQte)
-        setMouvement(null)
-        setQteChoisie(1)
-        setQteLibre('')
-        setNom('')
-        setChantier('')
-      }
+    if (error) {
+      setErreur(error.message.includes('Stock insuffisant') ? error.message : "Erreur lors de l'enregistrement.")
+    } else {
+      onUpdate(data as number)
+      setMouvement(null)
+      setQteChoisie(1)
+      setQteLibre('')
+      setNom('')
+      setChantier('')
     }
     setLoading(false)
   }

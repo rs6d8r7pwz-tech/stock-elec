@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Composant } from '@/lib/types'
 import SearchBar from '@/components/SearchBar'
+import ExportStock from '@/components/ExportStock'
 import { Package, AlertTriangle, Clock, ShoppingCart } from 'lucide-react'
 
 export default function Dashboard() {
@@ -35,9 +36,12 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* En-tête */}
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>Tableau de bord</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--gray)' }}>Vue d&apos;ensemble du stock de matériel électrique</p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>Tableau de bord</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--gray)' }}>Vue d&apos;ensemble du stock de matériel électrique</p>
+        </div>
+        <ExportStock />
       </div>
 
       {/* Stats */}

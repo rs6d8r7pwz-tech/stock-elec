@@ -62,13 +62,12 @@ export default function PageDemandes() {
       for (const l of reception.lines) {
         const recu = Math.max(0, recus[l.component_id] ?? 0)
         if (recu > 0) {
-          const { data: comp } = await supabase.from('components').select('quantity').eq('id', l.component_id).maybeSingle()
-          const actuel = comp?.quantity ?? l.stock ?? 0
-          await supabase.from('components').update({ quantity: actuel + recu }).eq('id', l.component_id)
-          await supabase.from('movements').insert({
-            component_id: l.component_id, movement_type: 'in', quantity: recu,
-            person_name: user || null, chantier_ref: 'Réception ' + reception.reference,
+          // Ajout atomique au stock + mouvement d'entrée
+          const { error } = await supabase.rpc('adjust_stock', {
+            p_id: l.component_id, p_delta: recu,
+            p_person: user || null, p_chantier: 'Réception ' + reception.reference,
           })
+          if (error) throw error
         }
       }
       const lignesRecues: CommandeLine[] = reception.lines.map((l) => ({ ...l, quantity: l.quantity }))
