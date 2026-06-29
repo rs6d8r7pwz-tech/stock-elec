@@ -233,9 +233,9 @@ export default function PageNotesFrais() {
             <p className="text-xs mt-2" style={{ color: 'var(--gray)' }}>{pages.length} page(s) — chaque photo est recadrée puis améliorée (scan).</p>
           </div>
 
-          <label className="flex items-start gap-2 text-sm" style={{ color: 'var(--text)' }}>
-            <input type="checkbox" checked={lisible} onChange={(e) => setLisible(e.target.checked)} className="mt-0.5" />
-            Je confirme que le <strong>montant</strong> et la <strong>TVA</strong> sont bien lisibles sur la photo.
+          <label className="flex items-start gap-2.5 text-sm cursor-pointer" style={{ color: 'var(--text)' }}>
+            <input type="checkbox" checked={lisible} onChange={(e) => setLisible(e.target.checked)} className="mt-0.5 shrink-0 w-4 h-4" />
+            <span className="flex-1 leading-snug">Je confirme que le <strong>montant</strong> et la <strong>TVA</strong> sont bien lisibles sur la photo.</span>
           </label>
 
           {erreur && <p className="text-sm" style={{ color: 'var(--danger)' }}>{erreur}</p>}
