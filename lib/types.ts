@@ -44,6 +44,20 @@ export interface CommandeLine {
 
 export type StatutCommande = 'a_commander' | 'livraison_en_cours' | 'finalisee'
 
+export interface NoteFrais {
+  id: string
+  sender: string
+  concerned: string[]
+  montant: number | null
+  objet: string | null
+  pdf_path: string
+  pdf_url: string
+  status: 'en_attente' | 'classee'
+  created_at: string
+  reviewed_by: string | null
+  reviewed_at: string | null
+}
+
 export interface PurchaseOrder {
   id: string
   reference: string

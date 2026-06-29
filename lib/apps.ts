@@ -35,6 +35,15 @@ export const APPS: AppDef[] = [
     accent: 'var(--red)',
     ready: true,
   },
+  {
+    id: 'notes_frais',
+    label: 'Notes de frais',
+    description: 'Envoyer une note de frais (photo → PDF) et suivre sa validation.',
+    href: '/notes-frais',
+    emoji: '🧾',
+    accent: 'var(--navy)',
+    ready: true,
+  },
 ]
 
 /**
@@ -44,15 +53,16 @@ export const APPS: AppDef[] = [
  * - Bon Intervention : tout le monde SAUF Richard Marrel.
  * - Un compte non listé n'a accès à rien (sécurité par défaut).
  */
+// Note : 'notes_frais' est accessible à tous les comptes.
 const ACCESS: Record<string, string[]> = {
-  'Romain Durand':    ['bon_intervention', 'stock'],
-  'Jerome Boulud':    ['bon_intervention', 'stock'],
-  'Richard Marrel':   ['stock'],
-  'François Armanet': ['bon_intervention'],
-  'Loic Jaquet':      ['bon_intervention'],
-  'Maxime Morel':     ['bon_intervention'],
-  'Bastien Brochier': ['bon_intervention'],
-  'Richard Besson':   ['bon_intervention'],
+  'Romain Durand':    ['bon_intervention', 'stock', 'notes_frais'],
+  'Jerome Boulud':    ['bon_intervention', 'stock', 'notes_frais'],
+  'Richard Marrel':   ['stock', 'notes_frais'],
+  'François Armanet': ['bon_intervention', 'notes_frais'],
+  'Loic Jaquet':      ['bon_intervention', 'notes_frais'],
+  'Maxime Morel':     ['bon_intervention', 'notes_frais'],
+  'Bastien Brochier': ['bon_intervention', 'notes_frais'],
+  'Richard Besson':   ['bon_intervention', 'notes_frais'],
 }
 
 export function appsFor(nom: string | null): AppDef[] {
