@@ -127,10 +127,9 @@ export default function PageNotesFrais() {
   // Suppression autorisée : Gestion toujours ; expéditeur seulement si encore "en attente"
   function peutSupprimer(n: NoteFrais) { return gestion || (n.sender === user && n.status === 'en_attente') }
 
-  // Ouvre le PDF via un lien temporaire (stockage privé)
-  async function voirPdf(n: NoteFrais) {
-    const { data } = await supabase.storage.from('notes-frais').createSignedUrl(n.pdf_path, 3600)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  // Ouvre le PDF (bucket public — URL publique directement)
+  function voirPdf(n: NoteFrais) {
+    if (n.pdf_url) window.open(n.pdf_url, '_blank')
     else alert("Impossible d'ouvrir le PDF.")
   }
 
