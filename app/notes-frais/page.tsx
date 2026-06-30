@@ -20,18 +20,29 @@ function loadImg(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src })
 }
 
-// Pages (dataURL JPEG déjà recadrées/scannées) -> un PDF
-async function pagesToPdf(pages: string[]): Promise<Blob> {
+// Pages (dataURL JPEG déjà recadrées/scannées) -> un PDF avec entête
+async function pagesToPdf(pages: string[], concerned: string[], objet?: string | null, montant?: number | null): Promise<Blob> {
   const { default: jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const PW = 210, PH = 297, M = 8
+  const PW = 210, PH = 297, M = 8, HEADER = 18
   for (let i = 0; i < pages.length; i++) {
     const img = await loadImg(pages[i])
     if (i > 0) doc.addPage()
-    const maxW = PW - M * 2, maxH = PH - M * 2
+    // Entête : titre + personnes concernées
+    doc.setFillColor(240, 240, 240)
+    doc.rect(0, 0, PW, HEADER, 'F')
+    doc.setFontSize(10)
+    doc.setTextColor(30, 30, 30)
+    const titre = (objet || 'Note de frais') + (montant ? ` — ${montant.toFixed(2)} €` : '')
+    doc.text(titre, M, 7)
+    doc.setFontSize(8.5)
+    doc.setTextColor(80, 80, 80)
+    doc.text('Concerne : ' + concerned.join(', '), M, 14)
+    // Photo sous l'entête
+    const maxW = PW - M * 2, maxH = PH - HEADER - M * 2
     let w = maxW, h = (w * img.height) / img.width
     if (h > maxH) { h = maxH; w = (h * img.width) / img.height }
-    doc.addImage(pages[i], 'JPEG', (PW - w) / 2, (PH - h) / 2, w, h)
+    doc.addImage(pages[i], 'JPEG', (PW - w) / 2, HEADER + M, w, h)
   }
   return doc.output('blob')
 }
@@ -93,14 +104,15 @@ export default function PageNotesFrais() {
     if (!lisible) { setErreur('Confirmez que le montant et la TVA sont lisibles.'); return }
     setEnvoi(true)
     try {
-      const blob = await pagesToPdf(pages)
+      const montantVal = montant ? parseFloat(montant.replace(',', '.')) : null
+      const blob = await pagesToPdf(pages, concerned, objet || null, montantVal)
       const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`
       const { error: upErr } = await supabase.storage.from('notes-frais').upload(path, blob, { contentType: 'application/pdf' })
       if (upErr) throw upErr
       const { data: pub } = supabase.storage.from('notes-frais').getPublicUrl(path)
       const { error: insErr } = await supabase.from('notes_frais').insert({
         sender: user, concerned,
-        montant: montant ? parseFloat(montant.replace(',', '.')) : null,
+        montant: montantVal,
         objet: objet || null, pdf_path: path, pdf_url: pub.publicUrl, status: 'en_attente',
       })
       if (insErr) throw insErr
