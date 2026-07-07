@@ -9,7 +9,7 @@ import { LogIn, ShieldCheck, AlertCircle } from 'lucide-react'
 
 export default function PageLogin() {
   return (
-    <Suspense fallback={<div className="min-h-screen" style={{ background: 'var(--navy)' }} />}>
+    <Suspense fallback={<div className="min-h-screen" style={{ background: 'transparent' }} />}>
       <LoginForm />
     </Suspense>
   )
@@ -60,7 +60,7 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--navy)' }}>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'transparent' }}>
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
           {/* En-tête logo */}
