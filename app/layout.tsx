@@ -7,19 +7,18 @@ import Shell from '@/components/Shell'
 export const metadata: Metadata = {
   title: 'Portail Electreau',
   description: 'Portail entreprise Electreau — bons d\'intervention, gestion de stock',
-}
-
-export const metadata: Metadata = {
-  // ... reste existant
-  manifest: "/manifest.json",
+  manifest: '/manifest.json',
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
     ],
-    apple: "/icon-180.png",
+    apple: '/icon-180.png',
   },
-  themeColor: "#16294a",
+};
+
+export const viewport: Viewport = {
+  themeColor: '#16294a',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
