@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Portail Electreau',
   description: 'Portail entreprise Electreau — bons d\'intervention, gestion de stock',
 }
-```ts
+
 export const metadata: Metadata = {
   // ... reste existant
   manifest: "/manifest.json",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   },
   themeColor: "#16294a",
 };
-```
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
