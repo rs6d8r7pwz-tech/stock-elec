@@ -11,25 +11,4 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },
-      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
-    ],
-    apple: '/icon-180.png',
-  },
-};
-
-export const viewport: Viewport = {
-  themeColor: '#16294a',
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="fr">
-      <body>
-        <ElectreauBg />
-        <AuthProvider>
-          <Shell>{children}</Shell>
-        </AuthProvider>
-      </body>
-    </html>
-  )
-}
+      { url: '/icon-512.png', type: 'image/png',
