@@ -318,6 +318,23 @@
     }
     .sig-clear:hover { color: var(--red); }
 
+    /* ── PHOTOS ── */
+    .photo-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 8px; margin-top: 10px;
+    }
+    .photo-thumb {
+      position: relative; border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; aspect-ratio: 1; background: #f0f4f8;
+    }
+    .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .photo-del {
+      position: absolute; top: 4px; right: 4px; width: 24px; height: 24px;
+      border: none; border-radius: 50%; background: rgba(214,45,40,.92);
+      color: #fff; font-size: 12px; line-height: 24px; padding: 0; cursor: pointer;
+    }
+    .photo-note { font-size: 12px; color: var(--gray); margin-top: 6px; }
+
     /* ── SUCCÈS ── */
     .success-icon  { font-size: 60px; text-align: center; margin: 8px 0 12px; }
     .success-title { font-size: 22px; font-weight: 800; color: var(--success); text-align: center; margin-bottom: 6px; }
@@ -814,6 +831,8 @@ function newForm() {
     departCustomCoords: null,
     sigTechnicien:  null,   // signature electronique du technicien (data URL PNG)
     sigClient:      null,   // signature electronique du client (data URL PNG)
+    hasPhotos:      false,  // inclure des photos au bon
+    photos:         [],     // liste de data URLs (JPEG) des photos jointes
   };
 }
 
@@ -1174,6 +1193,39 @@ function generatePDF() {
     105, 291, { align:'center' }
   );
 
+  // ── PHOTOS (une par page, à partir de la page 2 ; le bon reste entier en page 1) ──
+  if (f.hasPhotos && Array.isArray(f.photos) && f.photos.length) {
+    const nb = f.photos.length;
+    f.photos.forEach((dataUrl, idx) => {
+      doc.addPage();
+      // bandeau de marque
+      doc.setFillColor(...RED);  doc.rect(0, 0, 105, 2.5, 'F');
+      doc.setFillColor(...BLUE); doc.rect(105, 0, 105, 2.5, 'F');
+      // titre
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...NAVY);
+      doc.text('Photos jointes', ML, 16);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...GRAY);
+      doc.text(`Photo ${idx + 1} / ${nb}`, RX, 16, { align:'right' });
+      hair(19, ML, RX, HAIR, 0.4);
+      // image centrée, ratio préservé, dans la zone disponible
+      try {
+        const props = doc.getImageProperties(dataUrl);
+        const availW = PW, availH = 297 - 24 - 14;   // haut ~24mm, bas ~14mm
+        const ratio = Math.min(availW / props.width, availH / props.height);
+        const w = props.width * ratio, h = props.height * ratio;
+        const x = ML + (availW - w) / 2, yImg = 24 + (availH - h) / 2;
+        doc.addImage(dataUrl, 'JPEG', x, yImg, w, h);
+      } catch (e) { /* photo ignorée si illisible */ }
+      // pied de page
+      hair(287, ML, RX, HAIR, 0.25);
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...LGRAY);
+      doc.text(
+        `Electreau   |   Bon ${f.numero || ''}${f.client ? '  —  ' + f.client : ''}`,
+        105, 291, { align:'center' }
+      );
+    });
+  }
+
   const fn = `bon_${(f.client||'client').replace(/\s+/g,'_')}_${f.date||today()}.pdf`;
   doc.save(fn);
 }
@@ -1460,6 +1512,26 @@ function renderForm() {
           </div>
           ${f.hasRemarques ? `<textarea id="remarques" rows="3" placeholder="Vos remarques (anomalie constatée, suite à prévoir…)">${esc(f.remarques)}</textarea>` : ''}
         </div>
+        <div class="field">
+          <label>Photos</label>
+          <div class="toggle-group" style="margin-bottom:10px">
+            <button type="button" class="toggle-btn ${!f.hasPhotos?'active':''}" onclick="setPhotos(false)">Aucune</button>
+            <button type="button" class="toggle-btn ${f.hasPhotos?'active':''}" onclick="setPhotos(true)">Oui, inclure</button>
+          </div>
+          ${f.hasPhotos ? `
+            <input type="file" id="photo-input" accept="image/*" multiple capture="environment"
+              style="display:none" onchange="addPhotos(this.files)">
+            <button type="button" class="btn-add" onclick="document.getElementById('photo-input').click()">📷 Ajouter une photo</button>
+            <div class="photo-grid">
+              ${f.photos.map((p,i)=>`
+                <div class="photo-thumb">
+                  <img src="${p}" alt="Photo ${i+1}">
+                  <button type="button" class="photo-del" onclick="removePhoto(${i})" title="Supprimer">✕</button>
+                </div>`).join('')}
+            </div>
+            ${f.photos.length ? `<div class="photo-note">${f.photos.length} photo(s) — elles apparaîtront à partir de la page 2 du PDF.</div>` : ''}
+          ` : ''}
+        </div>
       </div>
 
       <div class="card">
@@ -1533,6 +1605,15 @@ function renderPreview() {
           </table>` :
           '<p style="color:var(--gray);font-style:italic;font-size:14px;">Aucun matériel renseigné</p>'}
       </div>
+
+      ${f.hasPhotos && f.photos.length ? `
+      <div class="preview-section">
+        <h4>Photos (${f.photos.length})</h4>
+        <div class="photo-grid">
+          ${f.photos.map((p,i)=>`<div class="photo-thumb"><img src="${p}" alt="Photo ${i+1}"></div>`).join('')}
+        </div>
+        <div class="photo-note">Elles apparaîtront à partir de la page 2 du PDF.</div>
+      </div>` : ''}
     </div>
 
     <div class="card">
@@ -1774,6 +1855,49 @@ function updateDureeSite() {
 function setRemarques(v) {
   saveForm();
   state.form.hasRemarques = v;
+  renderApp();
+}
+
+function setPhotos(v) {
+  saveForm();
+  state.form.hasPhotos = v;
+  renderApp();
+}
+
+// Ajoute des photos : compression (max 1400px, JPEG ~0.72) pour un PDF léger
+function addPhotos(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  saveForm();
+  let pending = files.length;
+  const done = () => { if (--pending === 0) renderApp(); };
+  files.forEach(file => {
+    if (!file.type || !file.type.startsWith('image/')) { done(); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1400;
+        let w = img.width, h = img.height;
+        if (w >= h && w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        else if (h > w && h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { state.form.photos.push(cv.toDataURL('image/jpeg', 0.72)); } catch (err) {}
+        done();
+      };
+      img.onerror = done;
+      img.src = e.target.result;
+    };
+    reader.onerror = done;
+    reader.readAsDataURL(file);
+  });
+}
+
+function removePhoto(i) {
+  saveForm();
+  state.form.photos.splice(i, 1);
   renderApp();
 }
 
