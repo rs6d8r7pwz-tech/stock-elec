@@ -214,7 +214,7 @@
       padding: 0 4px;
     }
     .materiau-row {
-      display: grid; grid-template-columns: 1fr 130px 38px;
+      display: grid; grid-template-columns: 1fr 38px;
       gap: 8px; align-items: center; margin-bottom: 8px;
     }
     .btn-remove {
@@ -288,6 +288,35 @@
     .preview-table td { padding: 7px 10px; font-size: 14px; border-bottom: 1px solid var(--blue-light); }
     .preview-table td:first-child { font-weight: 600; color: var(--gray); width: 42%; }
     .preview-table tr:last-child td { border-bottom: none; }
+
+    /* ── SIGNATURES ÉLECTRONIQUES ── */
+    .sig-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    }
+    @media (max-width: 560px) { .sig-grid { grid-template-columns: 1fr; } }
+    .sig-box { display: flex; flex-direction: column; gap: 6px; }
+    .sig-label {
+      font-size: 11px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .5px; color: var(--gray);
+    }
+    .sig-pad-wrap { position: relative; }
+    .sig-pad {
+      width: 100%; height: 140px; display: block;
+      background: #fff; border: 2px dashed var(--blue-light);
+      border-radius: 10px; touch-action: none; cursor: crosshair;
+    }
+    .sig-pad.signed { border-style: solid; border-color: var(--blue); }
+    .sig-hint {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%,-50%); pointer-events: none;
+      color: #b7c6d3; font-size: 13px; font-style: italic;
+    }
+    .sig-clear {
+      align-self: flex-end; background: none; border: none;
+      color: var(--gray); font-size: 12px; font-weight: 700;
+      cursor: pointer; padding: 2px 4px; text-decoration: underline;
+    }
+    .sig-clear:hover { color: var(--red); }
 
     /* ── SUCCÈS ── */
     .success-icon  { font-size: 60px; text-align: center; margin: 8px 0 12px; }
@@ -783,6 +812,8 @@ function newForm() {
     departGpsCoords: null,
     departCustomAddress: '',
     departCustomCoords: null,
+    sigTechnicien:  null,   // signature electronique du technicien (data URL PNG)
+    sigClient:      null,   // signature electronique du client (data URL PNG)
   };
 }
 
@@ -1093,31 +1124,19 @@ function generatePDF() {
     doc.setFillColor(247, 249, 251); doc.rect(ML, y, PW, 8.5, 'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...NAVY);
     doc.text('DÉSIGNATION', ML + 3, y + 5.6, { charSpace:0.3 });
-    doc.text('MONTANT', RX - 3, y + 5.6, { align:'right', charSpace:0.3 });
     hair(y + 8.5, ML, RX, BLUE, 0.6);
     y += 8.5;
 
     mats.forEach(m => {
-      const dl = doc.splitTextToSize(m.designation || '', PW - 46);
+      const dl = doc.splitTextToSize(m.designation || '', PW - 6);
       const rowH = Math.max(8.5, dl.length * 5.8 + 3);
       checkBreak(rowH);
       doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(...INK);
       doc.text(dl, ML + 3, y + 5.6);
-      const p = parseFloat(m.prix);
-      if (!isNaN(p)) doc.text(`${p.toFixed(2)} €`, RX - 3, y + 5.6, { align:'right' });
       hair(y + rowH);
       y += rowH;
     });
-
-    const tot = totalMat();
     y += 2;
-    checkBreak(13);
-    doc.setFillColor(...T_BLUE); doc.roundedRect(ML, y, PW, 11, 1.5, 1.5, 'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...NAVY);
-    doc.text('TOTAL MATÉRIEL', ML + 4, y + 7, { charSpace:0.4 });
-    doc.setFontSize(12); doc.setTextColor(...RED);
-    doc.text(`${tot.toFixed(2)} €`, RX - 4, y + 7, { align:'right' });
-    y += 13;
   }
   y += 4;
 
@@ -1133,6 +1152,17 @@ function generatePDF() {
   doc.setDrawColor(...HAIR); doc.setLineWidth(0.4);
   doc.roundedRect(ML, y, boxW, boxH, 2, 2, 'S');
   doc.roundedRect(ML + boxW + 10, y, boxW, boxH, 2, 2, 'S');
+  // Signatures electroniques dessinees dans les cases (avec marge interieure)
+  const sigPad = 2.5;
+  const drawSig = (dataUrl, boxX) => {
+    if (!dataUrl) return;
+    const availW = boxW - sigPad * 2, availH = boxH - sigPad * 2;
+    let w = availW, h = availH * 0.9;
+    try { doc.addImage(dataUrl, 'PNG', boxX + sigPad, y + sigPad, w, h); }
+    catch (e) { /* signature ignoree si illisible */ }
+  };
+  drawSig(f.sigTechnicien, ML);
+  drawSig(f.sigClient, ML + boxW + 10);
   doc.setDrawColor(0); doc.setLineWidth(0.2);
 
   // ── PIED DE PAGE ──
@@ -1434,24 +1464,15 @@ function renderForm() {
 
       <div class="card">
         <div class="card-title">🔧 Matériel utilisé</div>
-        ${mats.length ? `
-          <div class="mat-header">
-            <span>Désignation</span>
-            <span style="text-align:right">Prix unitaire (€)</span>
-            <span></span>
-          </div>` : ''}
         <div id="mats-container">
           ${mats.map((m,i)=>`
             <div class="materiau-row" id="mat-${i}">
               <input type="text" value="${esc(m.designation)}" placeholder="Ex: Câble 2.5mm², disjoncteur 16A…"
                 oninput="updateMat(${i},'designation',this.value)">
-              <input type="number" value="${esc(m.prix)}" placeholder="0.00" step="0.01" min="0"
-                style="text-align:right" oninput="updateMat(${i},'prix',this.value)">
               <button type="button" class="btn-remove" onclick="removeMat(${i})" title="Supprimer">✕</button>
             </div>`).join('')}
         </div>
         <button type="button" class="btn-add" onclick="addMat()">+ Ajouter un article</button>
-        ${mats.length ? `<div class="mat-total" id="mat-total">Total matériaux : ${tot.toFixed(2)} €</div>` : ''}
       </div>
 
       <div class="btn-row">
@@ -1508,10 +1529,34 @@ function renderPreview() {
         <h4>Matériel</h4>
         ${mats.length ? `
           <table class="preview-table">
-            ${mats.map(m=>`<tr><td>${esc(m.designation)}</td><td>${parseFloat(m.prix)?parseFloat(m.prix).toFixed(2)+' €':'—'}</td></tr>`).join('')}
-            <tr style="font-weight:800;color:var(--blue)"><td>Total</td><td>${tot.toFixed(2)} €</td></tr>
+            ${mats.map(m=>`<tr><td colspan="2">${esc(m.designation)}</td></tr>`).join('')}
           </table>` :
           '<p style="color:var(--gray);font-style:italic;font-size:14px;">Aucun matériel renseigné</p>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">✍️ Signatures</div>
+      <p style="color:var(--gray);font-size:14px;margin-bottom:16px;">
+        Signez ci-dessous avec le doigt (mobile) ou la souris (ordinateur). Les signatures apparaîtront sur le PDF.
+      </p>
+      <div class="sig-grid">
+        <div class="sig-box">
+          <span class="sig-label">Le technicien${f.technicien ? ' — ' + esc(f.technicien) : ''}</span>
+          <div class="sig-pad-wrap">
+            <canvas class="sig-pad" id="sig-technicien"></canvas>
+            <span class="sig-hint" id="sig-technicien-hint">Signez ici</span>
+          </div>
+          <button type="button" class="sig-clear" onclick="clearSignature('technicien')">Effacer</button>
+        </div>
+        <div class="sig-box">
+          <span class="sig-label">Le client (bon pour accord)</span>
+          <div class="sig-pad-wrap">
+            <canvas class="sig-pad" id="sig-client"></canvas>
+            <span class="sig-hint" id="sig-client-hint">Signez ici</span>
+          </div>
+          <button type="button" class="sig-clear" onclick="clearSignature('client')">Effacer</button>
+        </div>
       </div>
     </div>
 
@@ -1519,6 +1564,92 @@ function renderPreview() {
       <button type="button" class="btn-secondary" onclick="backToForm()">← Modifier</button>
       <button type="button" class="btn-primary" onclick="genererEtArchiver()">📄 Générer le PDF</button>
     </div>`;
+
+  initSignaturePads();
+}
+
+// ── Zones de signature electronique (souris + tactile) ──
+function initSignaturePads() {
+  ['technicien', 'client'].forEach(key => {
+    const canvas = document.getElementById('sig-' + key);
+    if (!canvas) return;
+    const hint = document.getElementById('sig-' + key + '-hint');
+    const ctx = canvas.getContext('2d');
+
+    const ratio = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = Math.round(rect.width  * ratio);
+    canvas.height = Math.round(rect.height * ratio);
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f2540';
+
+    const saved = state.form['sig' + key.charAt(0).toUpperCase() + key.slice(1)];
+    if (saved) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      img.src = saved;
+      canvas.classList.add('signed');
+      if (hint) hint.style.display = 'none';
+    }
+
+    let drawing = false, hasDrawn = false;
+    const pos = e => {
+      const r = canvas.getBoundingClientRect();
+      const p = e.touches ? e.touches[0] : e;
+      return { x: p.clientX - r.left, y: p.clientY - r.top };
+    };
+    const start = e => {
+      e.preventDefault();
+      drawing = true;
+      if (hint) hint.style.display = 'none';
+      const { x, y } = pos(e);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    };
+    const move = e => {
+      if (!drawing) return;
+      e.preventDefault();
+      const { x, y } = pos(e);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      hasDrawn = true;
+    };
+    const end = () => {
+      if (!drawing) return;
+      drawing = false;
+      if (hasDrawn) {
+        canvas.classList.add('signed');
+        saveSignature(key, canvas);
+      }
+    };
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+  });
+}
+
+function saveSignature(key, canvas) {
+  const field = 'sig' + key.charAt(0).toUpperCase() + key.slice(1);
+  state.form[field] = canvas.toDataURL('image/png');
+}
+
+function clearSignature(key) {
+  const canvas = document.getElementById('sig-' + key);
+  if (canvas) {
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    canvas.classList.remove('signed');
+  }
+  const hint = document.getElementById('sig-' + key + '-hint');
+  if (hint) hint.style.display = '';
+  const field = 'sig' + key.charAt(0).toUpperCase() + key.slice(1);
+  state.form[field] = null;
 }
 
 // ---- STEP 3: DONE ----
@@ -1660,9 +1791,6 @@ function removeMat(i) {
 
 function updateMat(i, field, val) {
   state.form.materiaux[i][field] = val;
-  const tot = totalMat();
-  const el = document.getElementById('mat-total');
-  if (el) el.textContent = `Total matériaux : ${tot.toFixed(2)} €`;
 }
 
 function submitForm(e) {
