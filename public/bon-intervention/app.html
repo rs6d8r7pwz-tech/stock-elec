@@ -813,6 +813,7 @@ function newForm() {
     technicien:     (state && state.user && state.user !== COMPTE_GESTION) ? state.user : '',     // chaîne dérivée (compat PDF/aperçu)
     date:           today(),
     client:         '',
+    site:           '',     // nom du site / installation (ex: PR La Tour du Pin)
     adresse:        '',
     modeIntervention: 'site',  // 'site' | 'distance'
     heureArrivee:   '',
@@ -984,7 +985,7 @@ function esc(s) {
 function saveForm() {
   const g = id => document.getElementById(id);
   const f = state.form;
-  ['nom','date','client','numero','adresse','heureArrivee','heureDepart','description','remarques']
+  ['nom','date','client','site','numero','adresse','heureArrivee','heureDepart','description','remarques']
     .forEach(id => { if (g(id)) f[id] = g(id).value; });
   syncTechnicien();
 }
@@ -1081,6 +1082,7 @@ function generatePDF() {
   // ── CLIENT ──
   sectionTitle('Informations client');
   field('Client', f.client);
+  if (f.site) field('Nom du site', f.site);
   if (f.modeIntervention !== 'distance') field("Adresse d'intervention", f.adresse);
   const _nbTech = (f.techniciens ? f.techniciens.length : 0) + (f.techAutres ? f.techAutres.filter(Boolean).length : 0);
   if (_nbTech > 1) {
@@ -1469,6 +1471,10 @@ function renderForm() {
           </div>
         </div>
         <div class="field">
+          <label>Nom du site <span style="font-weight:600;text-transform:none;color:var(--gray)">— ex : PR La Tour du Pin</span></label>
+          <input type="text" id="site" value="${esc(f.site)}" placeholder="Ex: PR La Tour du Pin, station de pompage…">
+        </div>
+        <div class="field">
           <label>Nom du bon * <span style="font-weight:600;text-transform:none;color:var(--gray)">— pour le retrouver dans les archives</span></label>
           <input type="text" id="nom" value="${esc(f.nom)}" placeholder="Ex: Dépannage tableau — Mairie de Morestel (auto si laissé vide)">
         </div>
@@ -1575,6 +1581,7 @@ function renderPreview() {
           <tr><td>${((f.techniciens?f.techniciens.length:0)+(f.techAutres?f.techAutres.filter(Boolean).length:0))>1?'Techniciens':'Technicien'}</td><td>${esc(f.technicien)}</td></tr>
           <tr><td>Date</td><td>${fmtDate(f.date)}</td></tr>
           <tr><td>Client</td><td>${esc(f.client)}</td></tr>
+          ${f.site ? `<tr><td>Nom du site</td><td>${esc(f.site)}</td></tr>` : ''}
           ${f.modeIntervention==='distance' ? '<tr><td>Type</td><td>🛜 À distance (depuis nos locaux)</td></tr>' : `<tr><td>Adresse</td><td>${esc(f.adresse)}</td></tr>`}
         </table>
       </div>
