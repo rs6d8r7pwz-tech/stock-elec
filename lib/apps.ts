@@ -44,6 +44,15 @@ export const APPS: AppDef[] = [
     accent: 'var(--navy)',
     ready: true,
   },
+  {
+    id: 'rapport',
+    label: 'Rapport',
+    description: 'Relevés d’exploitation sur site (CCBE AEP…) et rapport PDF client.',
+    href: '/rapport',
+    emoji: '📈',
+    accent: 'var(--blue-mid)',
+    ready: true,
+  },
 ]
 
 /**
@@ -51,18 +60,19 @@ export const APPS: AppDef[] = [
  * - Gestion ELECTREAU (direction) voit toutes les applis.
  * - Stock : Gestion, Romain Durand, Jerome Boulud, Richard Marrel.
  * - Bon Intervention : tout le monde SAUF Richard Marrel.
+ * - Rapport : tout le monde SAUF Richard Marrel (comme Bon Intervention).
  * - Un compte non listé n'a accès à rien (sécurité par défaut).
  */
 // Note : 'notes_frais' est accessible à tous les comptes.
 const ACCESS: Record<string, string[]> = {
-  'Romain Durand':    ['bon_intervention', 'stock', 'notes_frais'],
-  'Jerome Boulud':    ['bon_intervention', 'stock', 'notes_frais'],
+  'Romain Durand':    ['bon_intervention', 'stock', 'notes_frais', 'rapport'],
+  'Jerome Boulud':    ['bon_intervention', 'stock', 'notes_frais', 'rapport'],
   'Richard Marrel':   ['stock', 'notes_frais'],
-  'François Armanet': ['bon_intervention', 'notes_frais'],
-  'Loic Jaquet':      ['bon_intervention', 'notes_frais'],
-  'Maxime Morel':     ['bon_intervention', 'notes_frais'],
-  'Bastien Brochier': ['bon_intervention', 'notes_frais'],
-  'Richard Besson':   ['bon_intervention', 'notes_frais'],
+  'François Armanet': ['bon_intervention', 'notes_frais', 'rapport'],
+  'Loic Jaquet':      ['bon_intervention', 'notes_frais', 'rapport'],
+  'Maxime Morel':     ['bon_intervention', 'notes_frais', 'rapport'],
+  'Bastien Brochier': ['bon_intervention', 'notes_frais', 'rapport'],
+  'Richard Besson':   ['bon_intervention', 'notes_frais', 'rapport'],
 }
 
 export function appsFor(nom: string | null): AppDef[] {
