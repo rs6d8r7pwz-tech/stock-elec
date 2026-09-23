@@ -15,8 +15,12 @@ create table if not exists rapport_tournees (
   cloturee_at  timestamptz,
   pdf_path     text,
   pdf_url      text,
+  pdf_at       timestamptz,                         -- dernière génération du PDF
+  modifie_at   timestamptz,                         -- dernière modification après clôture
   updated_at   timestamptz not null default now()
 );
+alter table rapport_tournees add column if not exists pdf_at timestamptz;
+alter table rapport_tournees add column if not exists modifie_at timestamptz;
 create index if not exists rapport_tournees_client_idx on rapport_tournees(client, created_at desc);
 
 -- Un relevé = les valeurs saisies sur un ouvrage lors d'une tournée
