@@ -36,11 +36,13 @@ interface Props {
   user: string
   hist: Releve[]
   existant?: Releve
+  /** rang chronologique du rapport (les écarts se calculent sur le rapport terminé précédent) */
+  rang?: number
   onAnnuler: () => void
   onSauver: (r: Omit<Releve, 'id' | 'tournee_id' | 'client' | 'saved_at'> & { id?: string }) => Promise<void>
 }
 
-export default function Saisie({ site, tourneeId, user, hist, existant, onAnnuler, onSauver }: Props) {
+export default function Saisie({ site, tourneeId, user, hist, existant, rang, onAnnuler, onSauver }: Props) {
   const fields = site.fields
   const N = fields.length
   const STEP_OBS = N + 1, STEP_RECAP = N + 2
@@ -88,7 +90,7 @@ export default function Saisie({ site, tourneeId, user, hist, existant, onAnnule
   const valeurCourante = f ? parseSaisie(raw, f.kind) : null
   const evalCourante = useMemo(() => {
     if (!f || !b) return null
-    return evaluer(f, valeurCourante ?? undefined, site.id, b.date_releve, hist, { ...b.valeurs, ...(valeurCourante !== null ? { [f.key]: valeurCourante } : {}) })
+    return evaluer(f, valeurCourante ?? undefined, site.id, b.date_releve, hist, { ...b.valeurs, ...(valeurCourante !== null ? { [f.key]: valeurCourante } : {}) }, rang)
   }, [f, raw, b?.date_releve, hist]) // eslint-disable-line
 
   if (!b) return <div className="py-16 text-center" style={{ color: 'var(--gray)' }}>Chargement…</div>
@@ -144,7 +146,7 @@ export default function Saisie({ site, tourneeId, user, hist, existant, onAnnule
   const progression = Math.round((b.step / STEP_RECAP) * 100)
   const nbSaisis = fields.filter((x) => b.valeurs[x.key] !== undefined).length
   const nbPasses = N - nbSaisis
-  const alertes = fields.map((x) => ({ x, ev: evaluer(x, b.valeurs[x.key], site.id, b.date_releve, hist, b.valeurs) }))
+  const alertes = fields.map((x) => ({ x, ev: evaluer(x, b.valeurs[x.key], site.id, b.date_releve, hist, b.valeurs, rang) }))
     .filter(({ ev }) => ev.niveau === 'warn' || ev.niveau === 'crit')
 
   const chips = f ? [
@@ -208,10 +210,10 @@ export default function Saisie({ site, tourneeId, user, hist, existant, onAnnule
           {evalCourante.precedent ? (
             <div className="text-sm flex items-center gap-2" style={{ color: 'var(--gray)' }}>
               <Info className="w-4 h-4 shrink-0" />
-              Dernier relevé : <b style={{ color: 'var(--text)' }}>{fmtValeur(evalCourante.precedent.valeur, f)}</b> le {fmtDate(evalCourante.precedent.date)}
+              Rapport précédent : <b style={{ color: 'var(--text)' }}>{fmtValeur(evalCourante.precedent.valeur, f)}</b> le {fmtDate(evalCourante.precedent.date)}
             </div>
           ) : (
-            <div className="text-sm" style={{ color: 'var(--gray)' }}>Pas de relevé précédent.</div>
+            <div className="text-sm" style={{ color: 'var(--gray)' }}>Pas de valeur dans le rapport précédent.</div>
           )}
           <form onSubmit={(e) => { e.preventDefault(); suivant() }}>
             <div className="flex items-stretch rounded-xl border-2 bg-white overflow-hidden focus-within:shadow-md" style={{ borderColor: 'var(--navy)' }}>
@@ -313,7 +315,7 @@ export default function Saisie({ site, tourneeId, user, hist, existant, onAnnule
             </button>
             {fields.map((x, i) => {
               const v = b.valeurs[x.key]
-              const ev = evaluer(x, v, site.id, b.date_releve, hist, b.valeurs)
+              const ev = evaluer(x, v, site.id, b.date_releve, hist, b.valeurs, rang)
               const showSec = i === 0 || fields[i - 1].section !== x.section
               return (
                 <div key={x.key}>
