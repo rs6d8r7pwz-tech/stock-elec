@@ -58,20 +58,35 @@ export function fmtDate(iso: string, heure = false): string {
     (heure ? ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '')
 }
 
-/** Dernière valeur connue d'un point de mesure avant une date donnée */
-export function precedent(hist: Releve[], siteId: string, key: string, avant: string, numerique = false) {
-  const t = new Date(avant).getTime()
+/**
+ * Rang d'un relevé dans la chronologie des rapports : un relevé appartient à une tournée,
+ * et les tournées sont ordonnées par date de création. Les relevés importés (sans tournée)
+ * sont rangés par leur date. `_rang` est calculé au chargement (store.getHist).
+ */
+export function rangDe(r: Pick<Releve, 'date_releve'> & { _rang?: number }): number {
+  return typeof r._rang === 'number' ? r._rang : new Date(r.date_releve).getTime()
+}
+
+/**
+ * Valeur de référence d'un point de mesure = celle du dernier rapport terminé AVANT le rapport
+ * considéré (rang strictement inférieur). Si le point a été « passé » dans ce rapport, on remonte
+ * au rapport terminé précédent qui l'a relevé.
+ */
+export function precedent(hist: Releve[], siteId: string, key: string, avant: string, numerique = false, rang?: number) {
+  const limite = typeof rang === 'number' ? rang : new Date(avant).getTime()
   let best: { valeur: Valeur; date: string } | undefined
-  let bestT = -Infinity
+  let bestR = -Infinity, bestT = -Infinity
   for (const r of hist) {
     if (r.site_id !== siteId) continue
-    const rt = new Date(r.date_releve).getTime()
-    if (rt >= t || rt <= bestT) continue
+    const rr = rangDe(r as any)
+    if (rr >= limite) continue
     const v = r.valeurs?.[key]
     if (v === undefined || v === null) continue
     if (numerique && num(v) === null) continue
+    const rt = new Date(r.date_releve).getTime()
+    if (rr < bestR || (rr === bestR && rt <= bestT)) continue
     best = { valeur: v, date: r.date_releve }
-    bestT = rt
+    bestR = rr; bestT = rt
   }
   return best
 }
@@ -87,11 +102,11 @@ const pire = (a: Niveau, b: Niveau): Niveau => {
  */
 export function evaluer(
   f: FieldDef, v: Valeur | undefined | null, siteId: string, dateReleve: string,
-  hist: Releve[], voisins: Record<string, Valeur> = {},
+  hist: Releve[], voisins: Record<string, Valeur> = {}, rang?: number,
 ): Evaluation {
   const ev: Evaluation = { niveau: 'ok', messages: [] }
   const add = (n: Niveau, m: string) => { ev.niveau = pire(ev.niveau, n); ev.messages.push(m) }
-  const prec = precedent(hist, siteId, f.key, dateReleve, isIndex(f.kind) || f.kind === 'intensite')
+  const prec = precedent(hist, siteId, f.key, dateReleve, isIndex(f.kind) || f.kind === 'intensite', rang)
   if (prec) ev.precedent = prec
   if (v === undefined || v === null || v === '') return ev
 
@@ -147,10 +162,10 @@ export function evaluer(
 }
 
 /** Évalue tout un relevé → liste des alertes (niveau ≥ warn) */
-export function alertesReleve(fields: FieldDef[], r: Pick<Releve, 'site_id' | 'date_releve' | 'valeurs'>, hist: Releve[]) {
+export function alertesReleve(fields: FieldDef[], r: Pick<Releve, 'site_id' | 'date_releve' | 'valeurs'>, hist: Releve[], rang?: number) {
   const out: { field: FieldDef; ev: Evaluation }[] = []
   for (const f of fields) {
-    const ev = evaluer(f, r.valeurs[f.key], r.site_id, r.date_releve, hist, r.valeurs)
+    const ev = evaluer(f, r.valeurs[f.key], r.site_id, r.date_releve, hist, r.valeurs, rang)
     if (ev.niveau === 'warn' || ev.niveau === 'crit') out.push({ field: f, ev })
   }
   return out

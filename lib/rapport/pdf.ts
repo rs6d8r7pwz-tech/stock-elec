@@ -4,7 +4,7 @@
  * Page de garde + synthèse, volumes & temps de fonctionnement, une fiche par ouvrage.
  */
 import type { ClientDef, FieldDef, Releve, SiteDef, Tournee, Evaluation } from './types'
-import { evaluer, fmtDate, fmtNum, isIndex, num, SEUILS } from './rules'
+import { evaluer, fmtDate, fmtNum, isIndex, num, rangDe, SEUILS } from './rules'
 
 type RGB = [number, number, number]
 const NAVY: RGB = [22, 41, 74]
@@ -67,6 +67,8 @@ export async function genererRapportPdf(inp: PdfInput): Promise<Blob> {
   const logo = await loadLogo()
   const { client, tournee } = inp
 
+  // Écarts calculés par rapport aux rapports terminés AVANT celui-ci (ordre des tournées)
+  const rang = new Date(tournee.created_at).getTime()
   const hist = inp.hist.filter((h) => h.tournee_id !== tournee.id)
   const bySite: Record<string, Releve> = {}
   inp.releves.forEach((r) => { bySite[r.site_id] = r })
@@ -75,7 +77,7 @@ export async function genererRapportPdf(inp: PdfInput): Promise<Blob> {
     const rel = bySite[s.id]
     if (!rel) continue
     const evals: Record<string, Evaluation> = {}
-    for (const f of s.fields) evals[f.key] = evaluer(f, rel.valeurs[f.key], s.id, rel.date_releve, hist, rel.valeurs)
+    for (const f of s.fields) evals[f.key] = evaluer(f, rel.valeurs[f.key], s.id, rel.date_releve, hist, rel.valeurs, rang)
     faits.push({ site: s, rel, evals })
   }
   const nonFaits = client.sites.filter((s) => !bySite[s.id])
@@ -130,7 +132,7 @@ export async function genererRapportPdf(inp: PdfInput): Promise<Blob> {
     ['Client', `${client.nom} (${client.code})`],
     ['Période des relevés', periode],
     ['Intervenant(s)', intervenants.join(', ') || tournee.created_by],
-    ['Édité le', fmtDate(new Date().toISOString(), true)],
+    ['Édité le', fmtDate(new Date().toISOString(), true) + (tournee.modifie_at ? ' (version corrigée)' : '')],
   ]
   info.forEach(([k, v], i) => {
     const cx = M + 6 + (i % 2) * (CW / 2), cy = y + 10 + Math.floor(i / 2) * 13
@@ -351,7 +353,7 @@ export async function genererRapportPdf(inp: PdfInput): Promise<Blob> {
     // Mini-graphique : historique du volume journalier du 1er compteur
     const cpt = site.fields.find((f) => f.kind === 'index_m3')
     if (cpt) {
-      const pts = [...hist.filter((h) => h.site_id === site.id), rel]
+      const pts = [...hist.filter((h) => h.site_id === site.id && rangDe(h) < rang), rel]
         .filter((r) => num(r.valeurs[cpt.key]) !== null)
         .sort((a, b) => +new Date(a.date_releve) - +new Date(b.date_releve))
       const series: { d: string; v: number }[] = []

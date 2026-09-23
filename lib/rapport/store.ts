@@ -78,14 +78,52 @@ const K = {
   photo: (id: string) => `photo:${id}`,
   sync: (c: string) => `sync:${c}`,
   pend: (c: string) => `pendclose:${c}`,
+  edits: (c: string) => `edits:${c}`,
 }
 
 // ── Accès local ─────────────────────────────────────────────────────────────
 export const getTournee = (c: string) => kget<Tournee | null>(K.tournee(c)).then((t) => t || null)
 export const getReleves = async (t: string) => (await kget<Record<string, Releve>>(K.releves(t))) || {}
-export const getHist = async (c: string) => [...((await kget<Releve[]>(K.hist(c))) || []), ...(IMPORTS[c] || [])]
 const getPendClose = async (c: string) => (await kget<Tournee[]>(K.pend(c))) || []
-export const getArchives = async (c: string) => (await kget<Tournee[]>(K.archives(c))) || []
+const getArchivesBrutes = async (c: string) => (await kget<Tournee[]>(K.archives(c))) || []
+
+// File des modifications faites sur des rapports déjà terminés (envoyées à la prochaine synchro)
+type Edit = { type: 'releve'; data: Releve } | { type: 'tournee'; data: Tournee } | { type: 'del_tournee'; id: string }
+const getEdits = async (c: string) => (await kget<Edit[]>(K.edits(c))) || []
+async function ajouterEdit(c: string, e: Edit) {
+  const q = await getEdits(c)
+  const key = (x: Edit) => x.type === 'del_tournee' ? 'd' + x.id : x.type + x.data.id
+  await kset(K.edits(c), [...q.filter((x) => key(x) !== key(e)), e])
+}
+
+/** Rapports terminés (serveur + modifications locales pas encore envoyées), du plus récent au plus ancien */
+export async function getArchives(c: string): Promise<Tournee[]> {
+  const arch = await getArchivesBrutes(c)
+  const edits = await getEdits(c)
+  const map = new Map(arch.map((a) => [a.id, a]))
+  for (const e of edits) {
+    if (e.type === 'tournee' && e.data.statut === 'cloturee') map.set(e.data.id, { ...map.get(e.data.id), ...e.data })
+    if (e.type === 'del_tournee') map.delete(e.id)
+  }
+  return Array.from(map.values()).sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
+}
+
+/**
+ * Historique = relevés des rapports terminés (+ import Excel), chacun avec son rang chronologique :
+ * rang = date de création de sa tournée (les relevés importés : leur date).
+ * C'est ce rang qui définit « le rapport précédent » pour le calcul des écarts.
+ */
+export async function getHist(c: string): Promise<Releve[]> {
+  const base = (await kget<Releve[]>(K.hist(c))) || []
+  const edits = await getEdits(c)
+  const byId = new Map(base.map((r) => [r.id, r]))
+  for (const e of edits) if (e.type === 'releve') byId.set(e.data.id, e.data)
+  const ordre: Record<string, number> = {}
+  for (const t of [...(await getArchives(c)), ...(await getPendClose(c))]) ordre[t.id] = new Date(t.created_at).getTime()
+  const out = [...Array.from(byId.values()), ...(IMPORTS[c] || [])]
+  return out.map((r) => ({ ...r, _rang: r.tournee_id && ordre[r.tournee_id] ? ordre[r.tournee_id] : new Date(r.date_releve).getTime() }))
+}
+export const rangTournee = (t: Pick<Tournee, 'created_at'>) => new Date(t.created_at).getTime()
 export const getBrouillon = (t: string, s: string) => kget<Brouillon>(K.brouillon(t, s))
 export const setBrouillon = (t: string, b: Brouillon) => kset(K.brouillon(t, b.site_id), b)
 export const delBrouillon = (t: string, s: string) => kdel(K.brouillon(t, s))
@@ -166,6 +204,25 @@ export function synchroniser(client: string): Promise<void> {
   return running
 }
 
+/** Envoie un relevé (photos d'abord) et renvoie sa version à jour */
+async function envoyerReleve(r: Releve): Promise<Releve> {
+  const photos = []
+  for (const p of r.photos || []) {
+    if (p.url) { photos.push(p); continue }
+    const d = await getPhoto(p.id)
+    if (!d) continue
+    const path = `photos/${r.tournee_id}/${r.site_id}/${p.id}.jpg`
+    const up = await supabase.storage.from('rapport').upload(path, dataUrlToBlob(d), { upsert: true, contentType: 'image/jpeg' })
+    if (up.error) throw new Error(up.error.message)
+    const url = supabase.storage.from('rapport').getPublicUrl(path).data.publicUrl
+    photos.push({ id: p.id, path, url })
+  }
+  const row = { ...clean(r), photos, updated_at: new Date().toISOString() }
+  const { error } = await supabase.from('rapport_releves').upsert(row)
+  if (error) throw new Error(error.message)
+  return { ...r, photos, _dirty: false }
+}
+
 async function pousserTournee(t: Tournee): Promise<Tournee> {
   if (t._dirty) {
     const { error } = await supabase.from('rapport_tournees').upsert({ ...clean(t), updated_at: new Date().toISOString() })
@@ -176,26 +233,27 @@ async function pousserTournee(t: Tournee): Promise<Tournee> {
   let changed = false
   for (const r of Object.values(rel)) {
     if (!r._dirty) continue
-    // Photos d'abord
-    const photos = []
-    for (const p of r.photos || []) {
-      if (p.url) { photos.push(p); continue }
-      const d = await getPhoto(p.id)
-      if (!d) continue
-      const path = `photos/${r.tournee_id}/${r.site_id}/${p.id}.jpg`
-      const up = await supabase.storage.from('rapport').upload(path, dataUrlToBlob(d), { upsert: true, contentType: 'image/jpeg' })
-      if (up.error) throw new Error(up.error.message)
-      const url = supabase.storage.from('rapport').getPublicUrl(path).data.publicUrl
-      photos.push({ id: p.id, path, url })
-    }
-    const row = { ...clean(r), photos, updated_at: new Date().toISOString() }
-    const { error } = await supabase.from('rapport_releves').upsert(row)
-    if (error) throw new Error(error.message)
-    rel[r.site_id] = { ...r, photos, _dirty: false }
+    rel[r.site_id] = await envoyerReleve(r)
     changed = true
   }
   if (changed) await kset(K.releves(t.id), rel)
   return t
+}
+
+async function pousserEdits(client: string) {
+  for (const e of await getEdits(client)) {
+    if (e.type === 'tournee') {
+      const { error } = await supabase.from('rapport_tournees').upsert({ ...clean(e.data), updated_at: new Date().toISOString() })
+      if (error) throw new Error(error.message)
+    } else if (e.type === 'releve') {
+      await envoyerReleve(e.data)
+    } else {
+      const { error } = await supabase.from('rapport_tournees').delete().eq('id', e.id)
+      if (error) throw new Error(error.message)
+    }
+    const rest = (await getEdits(client)).filter((x) => x !== e && JSON.stringify(x) !== JSON.stringify(e))
+    await kset(K.edits(client), rest)
+  }
 }
 
 async function pousser(client: string) {
@@ -205,6 +263,8 @@ async function pousser(client: string) {
     await pousserTournee(pt)
     await kset(K.pend(client), (await getPendClose(client)).filter((x) => x.id !== pt.id))
   }
+  // 1 bis) Modifications de rapports terminés
+  await pousserEdits(client)
   // 2) Tournée en cours
   let t = await getTournee(client)
   if (!t) return
@@ -270,7 +330,7 @@ async function tirer(client: string) {
   const ids = new Set(hist.map((h) => h.id))
   const pendRel: Releve[] = []
   for (const pt of await getPendClose(client)) pendRel.push(...Object.values(await getReleves(pt.id)).filter((r) => !ids.has(r.id)))
-  await kset(K.hist(client), [...pendRel, ...hist.filter((r) => !cur || r.tournee_id !== cur.id)])
+  await kset(K.hist(client), [...pendRel, ...hist.filter((r) => (!cur || r.tournee_id !== cur.id) && r.source !== 'import_excel_2024')])
   // 4) Archives
   const { data: arch, error: e3 } = await supabase.from('rapport_tournees').select('*')
     .eq('client', client).eq('statut', 'cloturee').order('cloturee_at', { ascending: false }).limit(100)
@@ -280,7 +340,7 @@ async function tirer(client: string) {
 
 /** Nombre d'éléments en attente d'envoi */
 export async function enAttente(client: string): Promise<number> {
-  let n = 0
+  let n = (await getEdits(client)).length
   const ts = [...(await getPendClose(client))]
   const t = await getTournee(client)
   if (t) ts.push(t)
@@ -296,7 +356,7 @@ export async function cloturerTournee(client: string, user: string, pdfBlob?: Bl
   const t = await getTournee(client)
   if (!t) return
   const now = new Date().toISOString()
-  const closed: Tournee = { ...t, statut: 'cloturee', cloturee_by: user, cloturee_at: now, _dirty: true }
+  const closed: Tournee = { ...t, statut: 'cloturee', cloturee_by: user, cloturee_at: now, pdf_at: now, _dirty: true }
   if (pdfBlob && navigator.onLine) {
     try {
       const path = `rapports/${client}/${t.id}.pdf`
@@ -310,10 +370,10 @@ export async function cloturerTournee(client: string, user: string, pdfBlob?: Bl
   await kset(K.pend(client), [...(await getPendClose(client)).filter((x) => x.id !== t.id), closed])
   await kset(K.tournee(client), null)
   const rel = Object.values(await getReleves(t.id))
-  const hist = await getHist(client)
-  await kset(K.hist(client), [...rel.map((r) => ({ ...r })), ...hist.filter((h) => h.tournee_id !== t.id && h.source !== 'import_excel_2024')])
-  const arch = await getArchives(client)
-  await kset(K.archives(client), [closed, ...arch.filter((a) => a.id !== t.id)])
+  const hist = (await kget<Releve[]>(K.hist(client))) || []
+  await kset(K.hist(client), [...rel.map((r) => ({ ...r, _dirty: false })), ...hist.filter((h) => h.tournee_id !== t.id)])
+  const arch = await getArchivesBrutes(client)
+  await kset(K.archives(client), [{ ...closed, _dirty: false }, ...arch.filter((a) => a.id !== t.id)])
   try { await synchroniser(client) } catch { /* sera renvoyé plus tard */ }
   return closed
 }
@@ -325,4 +385,41 @@ export async function relevesDeTournee(client: string, tourneeId: string): Promi
   if (loc.length) return loc
   const { data } = await supabase.from('rapport_releves').select('*').eq('tournee_id', tourneeId)
   return (data as Releve[]) || []
+}
+
+/** Abandonne la tournée en cours (supprime ses saisies, localement et sur le serveur) */
+export async function abandonnerTournee(client: string, siteIds: string[]) {
+  const t = await getTournee(client)
+  if (!t) return
+  for (const s of siteIds) await delBrouillon(t.id, s).catch(() => {})
+  await kdel(K.releves(t.id))
+  await kset(K.tournee(client), null)
+  if (!t._new) await ajouterEdit(client, { type: 'del_tournee', id: t.id })
+  try { await synchroniser(client) } catch { /* plus tard */ }
+}
+
+/** Modifie (ou ajoute) un relevé dans un rapport déjà terminé */
+export async function modifierReleveArchive(client: string, arch: Tournee, r: Releve) {
+  const rel: Releve = { ...r, tournee_id: arch.id, _dirty: false }
+  delete (rel as any)._rang
+  await ajouterEdit(client, { type: 'releve', data: rel })
+  const t: Tournee = { ...arch, modifie_at: new Date().toISOString() }
+  await ajouterEdit(client, { type: 'tournee', data: clean(t) })
+  try { await synchroniser(client) } catch { /* plus tard */ }
+  return t
+}
+
+/** Enregistre le PDF regénéré d'un rapport terminé */
+export async function majPdfArchive(client: string, arch: Tournee, pdfBlob: Blob) {
+  const t: Tournee = { ...arch, pdf_at: new Date().toISOString() }
+  if (navigator.onLine) {
+    try {
+      const path = `rapports/${client}/${arch.id}.pdf`
+      const up = await supabase.storage.from('rapport').upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf' })
+      if (!up.error) { t.pdf_path = path; t.pdf_url = supabase.storage.from('rapport').getPublicUrl(path).data.publicUrl + '?v=' + Date.now() }
+    } catch { /* PDF gardé en local */ }
+  }
+  await ajouterEdit(client, { type: 'tournee', data: clean(t) })
+  try { await synchroniser(client) } catch { /* plus tard */ }
+  return t
 }

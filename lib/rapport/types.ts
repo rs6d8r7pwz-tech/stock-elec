@@ -66,6 +66,7 @@ export interface Releve {
   saved_at: string
   source?: string
   _dirty?: boolean
+  _rang?: number // position chronologique (calculée localement, jamais envoyée)
 }
 
 export interface Tournee {
@@ -78,6 +79,8 @@ export interface Tournee {
   cloturee_at?: string | null
   pdf_path?: string | null
   pdf_url?: string | null
+  pdf_at?: string | null     // date de la dernière génération du PDF
+  modifie_at?: string | null // dernière modification après clôture
   _dirty?: boolean
   _new?: boolean // jamais encore envoyée au serveur
 }
