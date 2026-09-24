@@ -435,7 +435,7 @@ export default function PageRapport() {
                     ) : draft ? (
                       <div className="text-xs mt-0.5" style={{ color: 'var(--warning)' }}>Saisie commencée — reprendre</div>
                     ) : (
-                      <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--gray)' }}>{archive ? 'Non relevé dans ce rapport' : `${s.fields.length} points de relevé`}</div>
+                      <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--gray)' }}>{archive ? 'Non relevé dans ce rapport' : `${s.fields.length} point${s.fields.length > 1 ? 's' : ''} de relevé`}</div>
                     )}
                   </div>
                   {al.length > 0 && (
