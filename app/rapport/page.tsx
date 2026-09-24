@@ -255,7 +255,7 @@ export default function PageRapport() {
         <EnTete titre="Nouveau rapport" sous="Pour quel client ?" onBack={() => window.history.back()} />
         {CLIENTS.map((c) => (
           <button key={c.id} onClick={() => nouveau(c.id)} className="w-full text-left bg-white rounded-2xl p-5 border shadow-sm hover:shadow-lg flex items-center gap-4" style={{ borderColor: 'var(--border)' }}>
-            <div className="w-14 h-14 rounded-xl flex items-center justify-center font-extrabold" style={{ background: 'var(--blue-light)', color: 'var(--navy)' }}>AEP</div>
+            <div className="w-14 h-14 rounded-xl flex items-center justify-center font-extrabold" style={{ background: 'var(--blue-light)', color: 'var(--navy)' }}>{c.code.split(' ').pop()}</div>
             <div className="flex-1"><div className="text-lg font-bold" style={{ color: 'var(--navy)' }}>{c.code}</div><div className="text-sm" style={{ color: 'var(--gray)' }}>{c.nom} — {c.sites.length} ouvrages</div></div>
             <ChevronRight className="w-5 h-5" style={{ color: 'var(--navy)' }} />
           </button>
