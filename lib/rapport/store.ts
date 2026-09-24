@@ -9,15 +9,10 @@
  */
 import { supabase } from '@/lib/supabase'
 import type { Brouillon, Releve, Tournee } from './types'
-import { HIST_CCBE_2024 } from './historique'
 
-// Historique importé de l'ancien fichier Excel (embarqué dans l'appli, pas besoin de base)
-const IMPORTS: Record<string, Releve[]> = {
-  ccbe_aep: HIST_CCBE_2024.map(([site_id, d, valeurs, observations]) => ({
-    id: `import-${site_id}-${d}`, tournee_id: null, client: 'ccbe_aep', site_id, date_releve: `${d}T09:00:00+01:00`,
-    valeurs, passes: [], observations, photos: [], saisi_par: 'Import Excel 2024', saved_at: `${d}T09:00:00+01:00`, source: 'import_excel_2024',
-  })),
-}
+// Pas d'historique importé : les écarts se calculent uniquement entre rapports saisis dans l'appli.
+// (Pour réimporter un ancien fichier plus tard : ajouter ici des relevés `source: 'import_…'` par client.)
+const IMPORTS: Record<string, Releve[]> = {}
 
 // ── Mini wrapper IndexedDB (clé/valeur) ─────────────────────────────────────
 const DB_NAME = 'electreau-rapport'
