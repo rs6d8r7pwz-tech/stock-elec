@@ -194,7 +194,7 @@ export default function Saisie({ site, tourneeId, user, hist, existant, rang, on
           {site.description && (
             <div className="text-sm rounded-xl p-4" style={{ background: 'var(--blue-light)', color: 'var(--navy)' }}>
               <div className="font-semibold mb-1">{site.nom}</div>{site.description}
-              <div className="mt-2 text-xs" style={{ color: 'var(--gray)' }}>{N} points de relevé</div>
+              <div className="mt-2 text-xs" style={{ color: 'var(--gray)' }}>{N} point{N > 1 ? 's' : ''} de relevé</div>
             </div>
           )}
         </div>
