@@ -6,6 +6,9 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { Position } from '@/lib/carte/types'
 
+/** Regroupement d'un client (vue d'ensemble) */
+export interface MapGroupe { id: string; nom: string; lat: number; lng: number; n: number; couleur: string }
+
 export interface MapPoint { id: string; lat: number; lng: number; nom: string; couleur: string; sousTitre?: string }
 
 interface Props {
@@ -21,6 +24,9 @@ interface Props {
   focus?: { pos: Position; zoom?: number; key: number } | null
   /** Cercle de rayon (m) autour de userPos */
   rayonM?: number | null
+  /** Vue d'ensemble : une étiquette par client au lieu des points */
+  groupes?: MapGroupe[]
+  onSelectGroupe?: (id: string) => void
   className?: string
 }
 
@@ -35,13 +41,16 @@ function pinSvg(c: string, sel: boolean) {
     <circle cx="12" cy="9.3" r="3" fill="#fff"/></svg>`
 }
 
-export default function MapView({ points = [], selectedId, onSelect, userPos, pick, fitKey, focus, rayonM, className }: Props) {
+export default function MapView({ points = [], selectedId, onSelect, userPos, pick, fitKey, focus, rayonM, groupes, onSelectGroupe, className }: Props) {
   const divRef = useRef<HTMLDivElement>(null)
   const L = useRef<any>(null)
   const map = useRef<any>(null)
   const cluster = useRef<any>(null)
   const userLayer = useRef<any>(null)
   const pickMarker = useRef<any>(null)
+  const groupeLayer = useRef<any>(null)
+  const onSelectGroupeRef = useRef(onSelectGroupe)
+  onSelectGroupeRef.current = onSelectGroupe
   const onSelectRef = useRef(onSelect)
   const pickRef = useRef(pick)
   onSelectRef.current = onSelect
@@ -86,6 +95,7 @@ export default function MapView({ points = [], selectedId, onSelect, userPos, pi
       })
       m.addLayer(cluster.current)
       userLayer.current = Lm.layerGroup().addTo(m)
+      groupeLayer.current = Lm.layerGroup().addTo(m)
 
       m.on('click', (e: any) => {
         if (pickRef.current) pickRef.current.onChange({ lat: e.latlng.lat, lng: e.latlng.lng })
@@ -130,13 +140,31 @@ export default function MapView({ points = [], selectedId, onSelect, userPos, pi
     cluster.current.addLayers(ms)
   }, [ready, points, selectedId])
 
+  // Étiquettes clients (vue d'ensemble)
+  useEffect(() => {
+    if (!ready) return
+    const Lm = L.current
+    groupeLayer.current.clearLayers()
+    ;(groupes || []).forEach((g) => {
+      const html = `<div style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transform:translate(-50%,-100%);
+        background:#fff;border:2px solid ${g.couleur};border-radius:999px;padding:5px 11px 5px 6px;
+        box-shadow:0 2px 8px rgba(0,0,0,.3);font:600 13px/1.1 -apple-system,Segoe UI,Roboto,sans-serif;color:#16294a;cursor:pointer">
+        <span style="background:${g.couleur};color:#fff;border-radius:999px;min-width:22px;height:22px;display:inline-grid;place-items:center;padding:0 6px;font-size:12px">${g.n}</span>
+        ${esc(g.nom)}</div>`
+      Lm.marker([g.lat, g.lng], { icon: Lm.divIcon({ html, className: '', iconSize: [0, 0], iconAnchor: [0, 0] }), title: g.nom })
+        .on('click', () => onSelectGroupeRef.current?.(g.id))
+        .addTo(groupeLayer.current)
+    })
+  }, [ready, groupes])
+
   // Recadrage sur les points
   useEffect(() => {
     if (!ready || fitKey === undefined) return
     if (pick?.pos) { map.current.setView([pick.pos.lat, pick.pos.lng], Math.max(map.current.getZoom(), 17)); return }
-    const pts = points.map((p) => [p.lat, p.lng])
-    if (pts.length === 1) map.current.setView(pts[0], 16)
-    else if (pts.length > 1) map.current.fitBounds(pts, { padding: [40, 40], maxZoom: 16 })
+    const pts = [...points.map((p) => [p.lat, p.lng]), ...(groupes || []).map((g) => [g.lat, g.lng])]
+    if (pts.length === 1) map.current.setView(pts[0], points.length ? 16 : 12)
+    else if (pts.length > 1) map.current.fitBounds(pts, { paddingTopLeft: [50, 90], paddingBottomRight: [50, 50], maxZoom: 16 })
+    else if (userPos) map.current.setView([userPos.lat, userPos.lng], 14)
   }, [ready, fitKey]) // eslint-disable-line
 
   // Centre demandé

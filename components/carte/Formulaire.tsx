@@ -40,6 +40,9 @@ export default function Formulaire({ user, client, points, existant, onChangerCl
   const [envoi, setEnvoi] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [fitKey, setFitKey] = useState(0)
+  const [ici, setIci] = useState<Position | null>(null)
+  const [focus, setFocus] = useState<{ pos: Position; zoom?: number; key: number } | null>(null)
+  const [locCarte, setLocCarte] = useState(false)
   const camRef = useRef<HTMLInputElement>(null)
   const galRef = useRef<HTMLInputElement>(null)
   const posInitiale = useRef(existant ? `${existant.lat},${existant.lng}` : '')
@@ -66,6 +69,24 @@ export default function Formulaire({ user, client, points, existant, onChangerCl
     } catch (e: any) {
       setGpsErr(e?.message || 'Position introuvable')
     } finally { setGpsEnCours(false) }
+  }
+
+  /** « Placer sur la carte » : la carte se centre d'abord sur notre position actuelle */
+  const placerSurCarte = async () => {
+    setMode('carte')
+    if (pos) return
+    if (ici) { setFocus({ pos: ici, zoom: 17, key: Date.now() }); return }
+    setLocCarte(true)
+    try {
+      let centre = false
+      const p = await positionPrecise((cur) => {
+        setIci(cur)
+        if (!centre) { centre = true; setFocus({ pos: cur, zoom: 17, key: Date.now() }) }
+      }, 30, 8000)
+      setIci(p)
+      if (!centre) setFocus({ pos: p, zoom: 17, key: Date.now() })
+    } catch { /* pas de GPS : la carte reste sur la vue par défaut */ }
+    finally { setLocCarte(false) }
   }
 
   const validerCoord = () => {
@@ -162,8 +183,8 @@ export default function Formulaire({ user, client, points, existant, onChangerCl
           <button onClick={() => { setMode('saisie'); setCoordErr(null); if (pos && !texteCoord) setTexteCoord(`${fmtCoord(pos.lat)}, ${fmtCoord(pos.lng)}`) }} className={btn(mode === 'saisie')} style={mode === 'saisie' ? { background: 'var(--navy)', borderColor: 'var(--navy)' } : { borderColor: 'var(--border)', color: 'var(--navy)' }}>
             <Keyboard className="w-5 h-5" /> Saisir les coordonnées
           </button>
-          <button onClick={() => setMode('carte')} className={btn(mode === 'carte')} style={mode === 'carte' ? { background: 'var(--navy)', borderColor: 'var(--navy)' } : { borderColor: 'var(--border)', color: 'var(--navy)' }}>
-            <MapIcon className="w-5 h-5" /> Placer sur la carte
+          <button onClick={placerSurCarte} className={btn(mode === 'carte')} style={mode === 'carte' ? { background: 'var(--navy)', borderColor: 'var(--navy)' } : { borderColor: 'var(--border)', color: 'var(--navy)' }}>
+            {locCarte ? <Loader2 className="w-5 h-5 animate-spin" /> : <MapIcon className="w-5 h-5" />} Placer sur la carte
           </button>
         </div>
 
@@ -185,14 +206,14 @@ export default function Formulaire({ user, client, points, existant, onChangerCl
           </div>
         )}
 
-        {mode === 'carte' && !pos && <p className="mt-2 text-sm" style={{ color: 'var(--gray)' }}>Touchez la carte à l&apos;emplacement du site.</p>}
+        {mode === 'carte' && !pos && <p className="mt-2 text-sm" style={{ color: 'var(--gray)' }}>{locCarte ? 'Centrage sur votre position…' : 'Touchez la carte à l’emplacement du site (le point bleu = vous).'}</p>}
 
         {(mode === 'carte' || pos) && (
           <div className="mt-3 rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
             <MapView className="h-72 w-full"
-              points={points.filter((p) => p.id !== existant?.id).map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, nom: p.nom, couleur: '#94a3b8' }))}
+              points={points.filter((p) => p.id !== existant?.id && p.client_id === client.id).map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, nom: p.nom, couleur: '#94a3b8' }))}
               pick={{ pos, onChange: (p) => { setPos(p); setSource('carte'); if (mode !== 'carte') setMode('carte') } }}
-              fitKey={pos ? fitKey : undefined} />
+              fitKey={pos ? fitKey : undefined} userPos={ici} focus={focus} />
           </div>
         )}
 
