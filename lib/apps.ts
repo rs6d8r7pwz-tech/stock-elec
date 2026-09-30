@@ -53,6 +53,15 @@ export const APPS: AppDef[] = [
     accent: 'var(--blue-mid)',
     ready: true,
   },
+  {
+    id: 'carte',
+    label: 'Carte ELECTReau',
+    description: 'Points GPS de tous les sites clients : créer, rechercher, y aller (Waze, Maps…).',
+    href: '/carte',
+    emoji: '🗺️',
+    accent: 'var(--red)',
+    ready: true,
+  },
 ]
 
 /**
@@ -61,18 +70,19 @@ export const APPS: AppDef[] = [
  * - Stock : Gestion, Romain Durand, Jerome Boulud, Richard Marrel.
  * - Bon Intervention : tout le monde SAUF Richard Marrel.
  * - Rapport : tout le monde SAUF Richard Marrel (comme Bon Intervention).
+ * - Carte ELECTReau : tout le monde.
  * - Un compte non listé n'a accès à rien (sécurité par défaut).
  */
 // Note : 'notes_frais' est accessible à tous les comptes.
 const ACCESS: Record<string, string[]> = {
-  'Romain Durand':    ['bon_intervention', 'stock', 'notes_frais', 'rapport'],
-  'Jerome Boulud':    ['bon_intervention', 'stock', 'notes_frais', 'rapport'],
-  'Richard Marrel':   ['stock', 'notes_frais'],
-  'François Armanet': ['bon_intervention', 'notes_frais', 'rapport'],
-  'Loic Jaquet':      ['bon_intervention', 'notes_frais', 'rapport'],
-  'Maxime Morel':     ['bon_intervention', 'notes_frais', 'rapport'],
-  'Bastien Brochier': ['bon_intervention', 'notes_frais', 'rapport'],
-  'Richard Besson':   ['bon_intervention', 'notes_frais', 'rapport'],
+  'Romain Durand':    ['bon_intervention', 'stock', 'notes_frais', 'rapport', 'carte'],
+  'Jerome Boulud':    ['bon_intervention', 'stock', 'notes_frais', 'rapport', 'carte'],
+  'Richard Marrel':   ['stock', 'notes_frais', 'carte'],
+  'François Armanet': ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
+  'Loic Jaquet':      ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
+  'Maxime Morel':     ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
+  'Bastien Brochier': ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
+  'Richard Besson':   ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
 }
 
 export function appsFor(nom: string | null): AppDef[] {
