@@ -61,7 +61,6 @@ export default function PageCarte() {
   // Préférences d'affichage mémorisées
   useEffect(() => {
     setOnglet(lsGet('carte_onglet', 'carte') === 'liste' ? 'liste' : 'carte')
-    setFiltreClient(lsGet('carte_client', 'tous'))
     setRayon(parseInt(lsGet('carte_rayon', '10000'), 10) || 0)
   }, [])
 
@@ -153,6 +152,23 @@ export default function PageCarte() {
     couleur: couleurClient(p.client_id, ordreClients),
     sousTitre: [clientDe(p.client_id)?.nom, p.commune].filter(Boolean).join(' · '),
   })), [filtres, ordreClients, clientDe])
+
+  // Vue d'ensemble (par défaut) : une étiquette par client, pas de points.
+  // On affiche les points dès qu'on choisit un client, qu'on cherche ou qu'on active « autour de moi ».
+  const vueEnsemble = filtreClient === 'tous' && !normaliser(q) && !autour
+  const groupes = useMemo(() => clients
+    .map((c) => {
+      const pts = points.filter((p) => p.client_id === c.id)
+      if (!pts.length) return null
+      return {
+        id: c.id, nom: c.nom, n: pts.length, couleur: couleurClient(c.id, ordreClients),
+        lat: pts.reduce((a, p) => a + p.lat, 0) / pts.length,
+        lng: pts.reduce((a, p) => a + p.lng, 0) / pts.length,
+      }
+    })
+    .filter(Boolean) as { id: string; nom: string; n: number; couleur: string; lat: number; lng: number }[],
+  [clients, points, ordreClients])
+  const choisirClient = (id: string) => { setFiltreClient(id); setSelId(null) }
 
   // Recadre la carte quand le filtre change
   useEffect(() => { setFitKey((k) => k + 1) }, [filtreClient, autour, rayon]) // eslint-disable-line
@@ -369,7 +385,7 @@ export default function PageCarte() {
           {q && <button onClick={() => setQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1"><X className="w-4 h-4" style={{ color: 'var(--gray)' }} /></button>}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          <select value={filtreClient} onChange={(e) => { setFiltreClient(e.target.value); lsSet('carte_client', e.target.value) }}
+          <select value={filtreClient} onChange={(e) => choisirClient(e.target.value)}
             className="rounded-lg border px-3 py-2 text-sm bg-white flex-1 min-w-[150px]" style={{ borderColor: 'var(--border)', color: 'var(--navy)' }}>
             <option value="tous">Tous les clients ({points.length})</option>
             {clients.map((c) => <option key={c.id} value={c.id}>{c.nom} ({nbParClient[c.id] || 0})</option>)}
@@ -399,18 +415,40 @@ export default function PageCarte() {
             </button>
           ))}
         </div>
-        <span className="text-sm" style={{ color: 'var(--gray)' }}>{filtres.length} résultat{filtres.length > 1 ? 's' : ''}</span>
+        <span className="text-sm" style={{ color: 'var(--gray)' }}>
+          {vueEnsemble ? `${groupes.length} client${groupes.length > 1 ? 's' : ''}` : `${filtres.length} point${filtres.length > 1 ? 's' : ''}`}
+        </span>
       </div>
+
+      {filtreClient !== 'tous' && (
+        <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'var(--blue-light)' }}>
+          <button onClick={() => choisirClient('tous')} className="flex items-center gap-1 text-sm font-semibold" style={{ color: 'var(--navy)' }}>
+            <ArrowLeft className="w-4 h-4" /> Tous les clients
+          </button>
+          <span className="ml-auto flex items-center gap-1.5 text-sm font-bold" style={{ color: 'var(--navy)' }}>
+            <span className="w-3 h-3 rounded-full" style={{ background: couleurClient(filtreClient, ordreClients) }} />
+            {clientDe(filtreClient)?.nom}
+          </span>
+        </div>
+      )}
 
       {onglet === 'carte' ? (
         <div className="relative rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
-          <MapView className="h-[62vh] min-h-[380px] w-full" points={pointsCarte} selectedId={selId} onSelect={setSelId}
+          <MapView className="h-[62vh] min-h-[380px] w-full" points={vueEnsemble ? [] : pointsCarte} selectedId={selId} onSelect={setSelId}
+            groupes={vueEnsemble ? groupes : []} onSelectGroupe={choisirClient}
             userPos={userPos} rayonM={autour ? rayon || null : null} fitKey={fitKey} focus={focus} />
           <button onClick={() => localiser(true)} title="Ma position"
             className="absolute z-[500] right-3 bottom-6 w-11 h-11 rounded-full bg-white shadow-lg grid place-items-center" style={{ color: '#1d6fd6' }}>
             {locEnCours ? <Loader2 className="w-5 h-5 animate-spin" /> : <LocateFixed className="w-5 h-5" />}
           </button>
-          {sel && (
+          {vueEnsemble && groupes.length > 0 && (
+            <div className="absolute z-[500] left-3 bottom-6 right-16 pointer-events-none">
+              <span className="inline-block bg-white/90 rounded-lg px-2.5 py-1.5 text-xs font-medium shadow" style={{ color: 'var(--navy)' }}>
+                Touchez un client pour voir ses points
+              </span>
+            </div>
+          )}
+          {sel && !vueEnsemble && (
             <div className="absolute z-[600] left-2 right-2 bottom-2 sm:left-3 sm:right-auto sm:w-96 bg-white rounded-xl shadow-xl p-3 space-y-2">
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
@@ -431,12 +469,26 @@ export default function PageCarte() {
         </div>
       ) : (
         <div className="grid gap-2">
-          {filtres.length === 0 && (
+          {vueEnsemble && groupes.map((g) => (
+            <button key={g.id} onClick={() => choisirClient(g.id)}
+              className="flex items-center gap-3 bg-white rounded-xl border px-4 py-4 text-left hover:shadow-md transition" style={{ borderColor: 'var(--border)' }}>
+              <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ background: g.couleur }} />
+              <span className="flex-1 font-semibold" style={{ color: 'var(--navy)' }}>{g.nom}</span>
+              <span className="text-sm" style={{ color: 'var(--gray)' }}>{g.n} point{g.n > 1 ? 's' : ''}</span>
+              <ChevronRight className="w-4 h-4 shrink-0" style={{ color: 'var(--gray)' }} />
+            </button>
+          ))}
+          {!vueEnsemble && filtres.length === 0 && (
             <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--border)', color: 'var(--gray)' }}>
               {points.length === 0 ? 'Aucun point pour le moment. Créez le premier avec « Nouveau point ».' : 'Aucun point ne correspond à la recherche.'}
             </div>
           )}
-          {filtres.slice(0, 300).map(({ p, d }) => (
+          {vueEnsemble && groupes.length === 0 && (
+            <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--border)', color: 'var(--gray)' }}>
+              Aucun point pour le moment. Créez le premier avec « Nouveau point ».
+            </div>
+          )}
+          {!vueEnsemble && filtres.slice(0, 300).map(({ p, d }) => (
             <button key={p.id} onClick={() => go({ n: 'fiche', id: p.id })}
               className="flex items-center gap-3 bg-white rounded-xl border px-4 py-3 text-left hover:shadow-md transition" style={{ borderColor: 'var(--border)' }}>
               <MapPin className="w-5 h-5 shrink-0" style={{ color: couleurClient(p.client_id, ordreClients) }} />
@@ -450,7 +502,7 @@ export default function PageCarte() {
               <ChevronRight className="w-4 h-4 shrink-0" style={{ color: 'var(--gray)' }} />
             </button>
           ))}
-          {filtres.length > 300 && <p className="text-xs text-center" style={{ color: 'var(--gray)' }}>300 premiers résultats affichés — affinez la recherche.</p>}
+          {!vueEnsemble && filtres.length > 300 && <p className="text-xs text-center" style={{ color: 'var(--gray)' }}>300 premiers résultats affichés — affinez la recherche.</p>}
         </div>
       )}
 
