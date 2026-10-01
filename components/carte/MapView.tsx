@@ -27,10 +27,15 @@ interface Props {
   /** Vue d'ensemble : une étiquette par client au lieu des points */
   groupes?: MapGroupe[]
   onSelectGroupe?: (id: string) => void
+  /** Repère fixe (le Bureau) toujours affiché, avec une icône dédiée */
+  repere?: { id: string; lat: number; lng: number; nom: string } | null
+  onSelectRepere?: (id: string) => void
+  /** Si défini, le recadrage centre la carte ici au lieu d'englober les points */
+  vueInitiale?: { lat: number; lng: number; zoom: number } | null
   className?: string
 }
 
-const DEFAUT: [number, number] = [45.856, 3.548] // Thiers
+const DEFAUT: [number, number] = [45.6606, 5.3246] // Bureau Electreau (Saint-Chef)
 const IGN = (layer: string, fmt: string) =>
   `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=normal&TILEMATRIXSET=PM&FORMAT=${fmt}&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}`
 
@@ -41,7 +46,7 @@ function pinSvg(c: string, sel: boolean) {
     <circle cx="12" cy="9.3" r="3" fill="#fff"/></svg>`
 }
 
-export default function MapView({ points = [], selectedId, onSelect, userPos, pick, fitKey, focus, rayonM, groupes, onSelectGroupe, className }: Props) {
+export default function MapView({ points = [], selectedId, onSelect, userPos, pick, fitKey, focus, rayonM, groupes, onSelectGroupe, repere, onSelectRepere, vueInitiale, className }: Props) {
   const divRef = useRef<HTMLDivElement>(null)
   const L = useRef<any>(null)
   const map = useRef<any>(null)
@@ -49,6 +54,9 @@ export default function MapView({ points = [], selectedId, onSelect, userPos, pi
   const userLayer = useRef<any>(null)
   const pickMarker = useRef<any>(null)
   const groupeLayer = useRef<any>(null)
+  const repereLayer = useRef<any>(null)
+  const onSelectRepereRef = useRef(onSelectRepere)
+  onSelectRepereRef.current = onSelectRepere
   const onSelectGroupeRef = useRef(onSelectGroupe)
   onSelectGroupeRef.current = onSelectGroupe
   const onSelectRef = useRef(onSelect)
@@ -96,6 +104,7 @@ export default function MapView({ points = [], selectedId, onSelect, userPos, pi
       m.addLayer(cluster.current)
       userLayer.current = Lm.layerGroup().addTo(m)
       groupeLayer.current = Lm.layerGroup().addTo(m)
+      repereLayer.current = Lm.layerGroup().addTo(m)
 
       m.on('click', (e: any) => {
         if (pickRef.current) pickRef.current.onChange({ lat: e.latlng.lat, lng: e.latlng.lng })
@@ -157,10 +166,26 @@ export default function MapView({ points = [], selectedId, onSelect, userPos, pi
     })
   }, [ready, groupes])
 
+  // Repère « Bureau »
+  useEffect(() => {
+    if (!ready) return
+    const Lm = L.current
+    repereLayer.current.clearLayers()
+    if (!repere) return
+    const html = `<div style="transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;cursor:pointer">
+      <div style="display:flex;align-items:center;gap:5px;background:#16294a;color:#fff;border:2px solid #fff;border-radius:10px;padding:4px 9px;
+        box-shadow:0 2px 8px rgba(0,0,0,.4);font:700 13px/1.1 -apple-system,Segoe UI,Roboto,sans-serif;white-space:nowrap">🏢 ${esc(repere.nom)}</div>
+      <div style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid #16294a;margin-top:-1px"></div></div>`
+    Lm.marker([repere.lat, repere.lng], { icon: Lm.divIcon({ html, className: '', iconSize: [0, 0], iconAnchor: [0, 0] }), zIndexOffset: 3000, title: repere.nom })
+      .on('click', () => onSelectRepereRef.current?.(repere.id))
+      .addTo(repereLayer.current)
+  }, [ready, repere?.id, repere?.lat, repere?.lng, repere?.nom]) // eslint-disable-line
+
   // Recadrage sur les points
   useEffect(() => {
     if (!ready || fitKey === undefined) return
     if (pick?.pos) { map.current.setView([pick.pos.lat, pick.pos.lng], Math.max(map.current.getZoom(), 17)); return }
+    if (vueInitiale) { map.current.setView([vueInitiale.lat, vueInitiale.lng], vueInitiale.zoom); return }
     const pts = [...points.map((p) => [p.lat, p.lng]), ...(groupes || []).map((g) => [g.lat, g.lng])]
     if (pts.length === 1) map.current.setView(pts[0], points.length ? 16 : 12)
     else if (pts.length > 1) map.current.fitBounds(pts, { paddingTopLeft: [50, 90], paddingBottomRight: [50, 50], maxZoom: 16 })
