@@ -577,6 +577,88 @@ async function bonDelete(id, role, auteur) {
 }
 
 // ============================================================
+// FILE D'ATTENTE D'ENVOI (bons pas encore arrivés sur le serveur)
+// ------------------------------------------------------------
+// Chaque bon est d'abord écrit sur l'appareil, PUIS envoyé à Supabase.
+// Si l'envoi échoue (pas de réseau sur site, page fermée, téléchargement
+// du PDF qui interrompt la page sur mobile…), il reste ici et est renvoyé
+// automatiquement : au démarrage, au retour du réseau et toutes les minutes.
+// ============================================================
+const OUTBOX_LS = 'electreau_bons_outbox_v1';
+const OUTBOX_DB = 'electreau-bons-outbox';
+let _outboxDb = null;
+function outboxIdb() {
+  if (!_outboxDb) _outboxDb = new Promise((res, rej) => {
+    const r = indexedDB.open(OUTBOX_DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('bons');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  return _outboxDb;
+}
+function outboxLsLoad() { try { return JSON.parse(localStorage.getItem(OUTBOX_LS) || '{}'); } catch(e) { return {}; } }
+// Écriture SYNCHRONE (localStorage) : le bon est à l'abri avant même la génération du PDF.
+function outboxPutSync(key, item) {
+  try { const o = outboxLsLoad(); o[key] = item; localStorage.setItem(OUTBOX_LS, JSON.stringify(o)); return true; }
+  catch(e) { return false; } // quota dépassé (photos) → IndexedDB
+}
+async function outboxPutIdb(key, item) {
+  const d = await outboxIdb();
+  await new Promise((res, rej) => { const tx = d.transaction('bons', 'readwrite'); tx.objectStore('bons').put(item, key); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+}
+async function outboxAll() {
+  const out = Object.entries(outboxLsLoad()).map(([k, v]) => ({ key: k, item: v }));
+  try {
+    const d = await outboxIdb();
+    await new Promise((res) => {
+      const tx = d.transaction('bons'); const st = tx.objectStore('bons'); const rq = st.openCursor();
+      rq.onsuccess = () => { const c = rq.result; if (c) { if (!out.some(x => x.key === c.key)) out.push({ key: c.key, item: c.value }); c.continue(); } else res(); };
+      rq.onerror = () => res();
+    });
+  } catch(e) {}
+  return out;
+}
+async function outboxDel(key) {
+  try { const o = outboxLsLoad(); if (o[key]) { delete o[key]; localStorage.setItem(OUTBOX_LS, JSON.stringify(o)); } } catch(e) {}
+  try { const d = await outboxIdb(); await new Promise((res) => { const tx = d.transaction('bons', 'readwrite'); tx.objectStore('bons').delete(key); tx.oncomplete = res; tx.onerror = res; }); } catch(e) {}
+}
+function avecDelai(promise, ms) {
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Délai dépassé')), ms))]);
+}
+// Le bon est-il déjà sur le serveur ? (évite les doublons si la réponse s'est perdue)
+async function bonDejaEnvoye(rec) {
+  if (!rec.numero) return false;
+  const l = await avecDelai(bonsList('technicien', rec.auteur), 20000);
+  return (l || []).some(b => b.numero === rec.numero && b.auteur === rec.auteur);
+}
+let _flushEnCours = false;
+async function envoyerFileAttente() {
+  if (_flushEnCours || !authConfigured()) return 0;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 0;
+  _flushEnCours = true;
+  let n = 0;
+  try {
+    for (const { key, item } of await outboxAll()) {
+      try {
+        if (!(await bonDejaEnvoye(item.rec))) await avecDelai(bonSave(item.rec), 45000);
+        await outboxDel(key);
+        n++;
+      } catch(e) { console.warn('Envoi du bon en attente impossible', e); }
+    }
+  } finally { _flushEnCours = false; }
+  return n;
+}
+async function majFileAttente(silencieux) {
+  const n = await envoyerFileAttente();
+  if (n > 0 && state.user) {
+    if (state.view === 'archives' || isGestion()) await loadArchives();
+    else if (state.step === 3) { state.archiveErreur = ''; state.archiveStatut = 'ok'; renderApp(); }
+  }
+}
+window.addEventListener('online', () => majFileAttente());
+setInterval(() => majFileAttente(), 60000);
+
+// ============================================================
 // POINT DE DÉPART — bureau / GPS / adresse libre
 // ============================================================
 async function getDepartCoords() {
@@ -1802,11 +1884,13 @@ function renderDone() {
     ${steps(3)}
     <div class="card" style="text-align:center;padding:36px 24px">
       <div class="success-icon">📄✅</div>
-      <div class="success-title">Bon généré et archivé !</div>
+      <div class="success-title">${state.archiveStatut === 'envoi' ? 'Bon généré — enregistrement…' : state.archiveStatut === 'attente' ? 'Bon généré (envoi en attente)' : 'Bon généré et enregistré !'}</div>
       <div class="success-sub">
         Le fichier PDF a été téléchargé.<br>
         Ouvrez-le, puis faites <strong>Ctrl+P</strong> (ou Cmd+P sur Mac) pour imprimer.
       </div>
+      ${state.archiveStatut === 'envoi' ? `<div class="badge loading" style="margin-top:16px">⏳ Enregistrement dans « Mes bons »…</div>` : ''}
+      ${state.archiveStatut === 'ok' ? `<div class="badge success-green" style="margin-top:16px">✓ Enregistré dans « Mes bons » (visible aussi par Gestion ELECTREAU)</div>` : ''}
       ${state.archiveErreur ? `<div class="note" style="margin-top:16px;text-align:left">⚠️ ${esc(state.archiveErreur)}</div>` : ''}
       <div class="btn-row" style="justify-content:center;margin-top:24px;flex-wrap:wrap">
         <button type="button" class="btn-secondary" onclick="doGenerate()">↓ Re-télécharger le PDF</button>
@@ -2008,20 +2092,32 @@ async function genererEtArchiver() {
   if (!f.nom || !f.nom.trim()) {
     f.nom = (f.client ? f.client + ' — ' : '') + fmtDate(f.date);
   }
-  generatePDF();
-  try {
-    await bonSave({
-      numero: f.numero, nom: f.nom, auteur: state.user,
-      techniciens: f.technicien, client: f.client,
-      date_intervention: f.date, form: f,
-    });
-    state.archiveErreur = '';
-  } catch(e) {
-    console.warn('Archivage échoué', e);
-    state.archiveErreur = "Le PDF a été généré, mais l'archivage en ligne a échoué (le bon n'apparaîtra pas dans les archives). Vérifiez la connexion / la configuration Supabase.";
-  }
+  const rec = {
+    numero: f.numero, nom: f.nom, auteur: state.user,
+    techniciens: f.technicien, client: f.client,
+    date_intervention: f.date, form: JSON.parse(JSON.stringify(f)),
+  };
+  // 1) Le bon est d'abord mis à l'abri sur l'appareil (synchrone, avant le PDF)
+  const key = 'bon-' + (f.numero || Date.now()) + '-' + Math.random().toString(36).slice(2, 7);
+  const item = { rec, created_at: new Date().toISOString() };
+  const surAppareil = outboxPutSync(key, item);
+  // 2) PDF (sur téléphone, le téléchargement peut interrompre la page : le bon est déjà sauvegardé)
+  try { generatePDF(); } catch(e) { console.warn('PDF', e); }
+  if (!surAppareil) { try { await outboxPutIdb(key, item); } catch(e) { console.warn('Sauvegarde locale impossible', e); } }
+  // 3) Envoi au serveur → visible dans « Mes bons » et sur le compte Gestion ELECTREAU
+  state.archiveStatut = 'envoi'; state.archiveErreur = '';
   state.step = 3;
   renderApp();
+  try {
+    await avecDelai(bonSave(rec), 45000);
+    await outboxDel(key);
+    state.archiveStatut = 'ok';
+  } catch(e) {
+    console.warn('Archivage différé', e);
+    state.archiveStatut = 'attente';
+    state.archiveErreur = "Pas de connexion au serveur pour l'instant : le bon est gardé sur ce téléphone et sera envoyé automatiquement dès que le réseau revient (il apparaît déjà dans « Mes bons » avec la mention « Pas encore envoyé »).";
+  }
+  if (state.step === 3 && state.view !== 'archives') renderApp();
 }
 
 // ============================================================
@@ -2033,12 +2129,21 @@ function goForm() { state.view = 'form'; renderApp(); }
 async function loadArchives() {
   state.archivesLoading = true; state.archivesError = '';
   renderApp();
+  try { await envoyerFileAttente(); } catch(e) {}
   try {
     state.archives = await bonsList(roleCourant(), state.user) || [];
   } catch(e) {
     state.archives = [];
     state.archivesError = 'Impossible de charger les archives (connexion / configuration).';
   }
+  // Bons de CET appareil pas encore arrivés sur le serveur
+  try {
+    const enAttente = (await outboxAll())
+      .filter(x => x.item && x.item.rec && (isGestion() || x.item.rec.auteur === state.user))
+      .map(x => Object.assign({}, x.item.rec, { id: 'attente:' + x.key, _attente: true, valide: false, created_at: x.item.created_at }));
+    const dejaLa = new Set((state.archives || []).map(b => b.numero + '|' + b.auteur));
+    state.archives = enAttente.filter(b => !dejaLa.has(b.numero + '|' + b.auteur)).concat(state.archives || []);
+  } catch(e) {}
   state.archivesLoading = false;
   renderApp();
 }
@@ -2102,6 +2207,18 @@ function renderArchivesList() {
 
   cont.innerHTML = list.map(function(b) {
     const idJs = "'" + String(b.id).replace(/'/g,"\\'") + "'";
+    if (b._attente) {
+      return '<div class="bon-row" style="border-color:#f59e0b;background:#fffbeb">'
+        + '<div class="bon-main">'
+        +   '<div class="bon-nom">' + esc(b.nom || b.numero || 'Bon') + ' <span class="bon-statut attente" style="background:#fde68a;color:#92400e">📤 Pas encore envoyé</span></div>'
+        +   '<div class="bon-sub">' + esc([b.client, b.techniciens].filter(Boolean).join(' · ')) + ' — enregistré sur ce téléphone, envoi automatique dès que le réseau revient</div>'
+        +   '<div class="bon-date">' + (b.date_intervention ? fmtDate(b.date_intervention) : '—') + (b.numero ? ' · N° ' + esc(b.numero) : '') + '</div>'
+        + '</div>'
+        + '<div class="bon-actions">'
+        +   '<button type="button" class="bon-act" onclick="regenererBon(' + idJs + ')">📄 PDF</button>'
+        +   '<button type="button" class="bon-act primary" onclick="envoyerMaintenant()">📤 Envoyer</button>'
+        + '</div></div>';
+    }
     const statut = b.valide
       ? '<span class="bon-statut valide">✓ Validé</span>'
       : '<span class="bon-statut attente">⏳ En attente</span>';
@@ -2121,6 +2238,13 @@ function renderArchivesList() {
       + '<div class="bon-actions">' + actions + '</div>'
       + '</div>';
   }).join('');
+}
+
+async function envoyerMaintenant() {
+  if (navigator.onLine === false) { alert('Pas de réseau pour le moment. Le bon sera envoyé automatiquement dès que la connexion revient.'); return; }
+  const n = await envoyerFileAttente();
+  await loadArchives();
+  if (!n) alert("Envoi impossible pour l'instant (connexion au serveur). Nouvel essai automatique dans une minute.");
 }
 
 async function toggleValide(id, val) {
@@ -2158,7 +2282,7 @@ function nouveauBon() {
   state = { user: u, step: 1, form: newForm(), isLoadingTrajet: false, trajetError: null, isLoadingGps: false,
             loginNom: '', loginInitialise: null, loginBusy: false, loginError: '',
             view: 'form', archives: arch || [], archivesLoading: false, archivesError: '',
-            archFiltre: 'tous', archRecherche: '', archiveErreur: '' };
+            archFiltre: 'tous', archRecherche: '', archiveErreur: '', archiveStatut: '' };
   renderApp();
 }
 
@@ -2174,6 +2298,7 @@ else {
   initDepartCoords();
   if (isGestion()) { state.view = "archives"; loadArchives(); }
   else renderApp();
+  setTimeout(() => majFileAttente(), 1500);
 }
 
 </script>
