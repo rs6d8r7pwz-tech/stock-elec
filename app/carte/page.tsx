@@ -259,6 +259,7 @@ export default function PageCarte() {
           client={c}
           points={points}
           existant={existant}
+          clients={clients}
           onChangerClient={existant ? undefined : () => remplacer({ n: 'choixClient' })}
           onAnnuler={retour}
           onVoir={(id) => go({ n: 'fiche', id })}
