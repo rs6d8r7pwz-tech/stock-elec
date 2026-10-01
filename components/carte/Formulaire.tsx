@@ -15,6 +15,7 @@ interface Props {
   client: CarteClient
   points: CartePoint[]
   existant?: CartePoint | null
+  clients?: CarteClient[]
   onChangerClient?: () => void
   onFini: (p: CartePoint) => void
   onAnnuler: () => void
@@ -23,7 +24,7 @@ interface Props {
 
 type PhotoLoc = { kind: 'old'; ph: CartePhoto } | { kind: 'new'; data: string; id: string }
 
-export default function Formulaire({ user, client, points, existant, onChangerClient, onFini, onAnnuler, onVoir }: Props) {
+export default function Formulaire({ user, client, points, existant, clients = [], onChangerClient, onFini, onAnnuler, onVoir }: Props) {
   const [nom, setNom] = useState(existant?.nom || '')
   const [pos, setPos] = useState<Position | null>(existant ? { lat: existant.lat, lng: existant.lng, precision: existant.precision_m } : null)
   const [source, setSource] = useState<SourcePos>(existant?.source || 'gps')
@@ -284,9 +285,9 @@ export default function Formulaire({ user, client, points, existant, onChangerCl
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 grid place-items-center shrink-0"><AlertTriangle className="w-5 h-5" /></div>
               <div>
-                <h2 className="font-bold text-lg" style={{ color: 'var(--navy)' }}>Ce point existe peut-être déjà</h2>
+                <h2 className="font-bold text-lg" style={{ color: 'var(--navy)' }}>Un point existe déjà</h2>
                 <p className="text-sm" style={{ color: 'var(--gray)' }}>
-                  {doublons.length === 1 ? 'Un point ressemblant est déjà enregistré :' : `${doublons.length} points ressemblants sont déjà enregistrés :`}
+                  {doublons.length === 1 ? 'Un autre point existe déjà avec ce même nom ou au même endroit (moins de 100 m) :' : `${doublons.length} points existent déjà avec ce même nom ou au même endroit (moins de 100 m) :`}
                 </p>
               </div>
             </div>
@@ -295,13 +296,13 @@ export default function Formulaire({ user, client, points, existant, onChangerCl
                 <li key={d.point.id} className="rounded-xl border px-3 py-2" style={{ borderColor: 'var(--border)' }}>
                   <div className="font-semibold" style={{ color: 'var(--navy)' }}>« {d.point.nom} »</div>
                   <div className="text-xs" style={{ color: 'var(--gray)' }}>
-                    {d.raison} · à {fmtDistance(d.distance)} de votre point{d.point.commune ? ` · ${d.point.commune}` : ''}{d.point.created_by ? ` · créé par ${d.point.created_by}` : ''}
+                    <b>{d.raison}</b> · client {clients.find((c) => c.id === d.point.client_id)?.nom || '?'} · à {fmtDistance(d.distance)} de votre point{d.point.commune ? ` · ${d.point.commune}` : ''}{d.point.created_by ? ` · créé par ${d.point.created_by}` : ''}
                   </div>
                   <button onClick={() => onVoir(d.point.id)} className="text-xs font-semibold underline mt-1" style={{ color: 'var(--navy)' }}>Voir ce point</button>
                 </li>
               ))}
             </ul>
-            <p className="text-sm font-medium" style={{ color: 'var(--navy)' }}>Êtes-vous sûr de vouloir {existant ? 'enregistrer' : 'créer'} « {nom.trim()} » quand même ?</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--navy)' }}>Voulez-vous quand même {existant ? 'enregistrer' : 'créer'} « {nom.trim()} » ?</p>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setDoublons(null)} className="rounded-xl border py-3 font-semibold" style={{ borderColor: 'var(--border)', color: 'var(--navy)' }}>Non, annuler</button>
               <button onClick={enregistrer} className="rounded-xl py-3 font-semibold text-white" style={{ background: 'var(--red)' }}>Oui, {existant ? 'enregistrer' : 'créer'}</button>
