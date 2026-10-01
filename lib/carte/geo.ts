@@ -204,32 +204,39 @@ export function nomsProches(a: string, b: string): boolean {
   return ratio >= 0.8
 }
 
-export const SEUIL_DOUBLON_M = 50
-export const SEUIL_AUTRE_CLIENT_M = 20
+/** Rayon dans lequel un point existant est considéré « au même endroit » (tous clients) */
+export const SEUIL_DOUBLON_M = 100
 
 export interface Doublon { point: CartePoint; distance: number; raison: string; memeClient: boolean }
 
+/**
+ * Doublons possibles d'un nouveau point (tous clients confondus) :
+ * - un point à moins de 100 m ;
+ * - ou un point qui porte le même nom (ou un nom quasi identique).
+ */
 export function chercherDoublons(
   nouveau: { nom: string; lat: number; lng: number; client_id: string },
   points: CartePoint[],
   ignorerId?: string,
 ): Doublon[] {
   const res: Doublon[] = []
+  const n = normaliser(nouveau.nom).replace(/ /g, '')
   for (const p of points) {
     if (p.id === ignorerId) continue
     const d = distanceM(nouveau, p)
-    const proche = nomsProches(nouveau.nom, p.nom)
-    const memeClient = p.client_id === nouveau.client_id
-    if (memeClient && (d <= SEUIL_DOUBLON_M || proche)) {
-      const raisons = []
-      if (proche) raisons.push('nom quasi identique')
-      if (d <= SEUIL_DOUBLON_M) raisons.push('même endroit')
-      res.push({ point: p, distance: d, raison: raisons.join(' · '), memeClient })
-    } else if (!memeClient && d <= SEUIL_AUTRE_CLIENT_M) {
-      res.push({ point: p, distance: d, raison: 'même endroit, autre client', memeClient })
-    }
+    const memeNom = !!n && normaliser(p.nom).replace(/ /g, '') === n
+    const proche = memeNom || nomsProches(nouveau.nom, p.nom)
+    const ici = d <= SEUIL_DOUBLON_M
+    if (!proche && !ici) continue
+    const raisons = []
+    if (memeNom) raisons.push('même nom')
+    else if (proche) raisons.push('nom quasi identique')
+    if (ici) raisons.push('au même endroit')
+    res.push({ point: p, distance: d, raison: raisons.join(' · '), memeClient: p.client_id === nouveau.client_id })
   }
-  return res.sort((a, b) => Number(b.memeClient) - Number(a.memeClient) || a.distance - b.distance)
+  // Les plus probables d'abord : même nom ET même endroit, puis même client, puis le plus proche
+  const score = (x: Doublon) => (x.raison.includes('nom') ? 2 : 0) + (x.distance <= SEUIL_DOUBLON_M ? 2 : 0) + (x.memeClient ? 1 : 0)
+  return res.sort((a, b) => score(b) - score(a) || a.distance - b.distance)
 }
 
 // ── Couleur par client ───────────────────────────────────────────────────────
