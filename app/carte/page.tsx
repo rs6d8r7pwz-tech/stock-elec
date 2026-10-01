@@ -156,9 +156,13 @@ export default function PageCarte() {
   // Vue d'ensemble (par défaut) : une étiquette par client, pas de points.
   // On affiche les points dès qu'on choisit un client, qu'on cherche ou qu'on active « autour de moi ».
   const vueEnsemble = filtreClient === 'tous' && !normaliser(q) && !autour
+  // Point de départ commun : le site nommé « Bureau »
+  const bureau = useMemo(() => points.find((p) => normaliser(p.nom) === 'bureau') || null, [points])
+  const depuisBureau = (p: CartePoint) => (bureau && p.id !== bureau.id ? distanceM(bureau, p) : null)
+
   const groupes = useMemo(() => clients
     .map((c) => {
-      const pts = points.filter((p) => p.client_id === c.id)
+      const pts = points.filter((p) => p.client_id === c.id && p.id !== bureau?.id)
       if (!pts.length) return null
       return {
         id: c.id, nom: c.nom, n: pts.length, couleur: couleurClient(c.id, ordreClients),
@@ -167,7 +171,7 @@ export default function PageCarte() {
       }
     })
     .filter(Boolean) as { id: string; nom: string; n: number; couleur: string; lat: number; lng: number }[],
-  [clients, points, ordreClients])
+  [clients, points, ordreClients, bureau])
   const choisirClient = (id: string) => { setFiltreClient(id); setSelId(null) }
 
   // Recadre la carte quand le filtre change
@@ -292,6 +296,7 @@ export default function PageCarte() {
           <p className="text-sm mt-0.5" style={{ color: 'var(--gray)' }}>
             {[p.adresse, [p.code_postal, p.commune].filter(Boolean).join(' ')].filter(Boolean).join(', ') || 'Adresse inconnue'}
             {d != null && <> · <b>{fmtDistance(d)}</b> de vous</>}
+            {depuisBureau(p) != null && <> · {fmtDistance(depuisBureau(p)!)} du bureau</>}
           </p>
         </div>
 
@@ -436,6 +441,8 @@ export default function PageCarte() {
         <div className="relative rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
           <MapView className="h-[62vh] min-h-[380px] w-full" points={vueEnsemble ? [] : pointsCarte} selectedId={selId} onSelect={setSelId}
             groupes={vueEnsemble ? groupes : []} onSelectGroupe={choisirClient}
+            repere={bureau ? { id: bureau.id, lat: bureau.lat, lng: bureau.lng, nom: 'Bureau' } : null} onSelectRepere={setSelId}
+            vueInitiale={vueEnsemble && bureau ? { lat: bureau.lat, lng: bureau.lng, zoom: 10 } : null}
             userPos={userPos} rayonM={autour ? rayon || null : null} fitKey={fitKey} focus={focus} />
           <button onClick={() => localiser(true)} title="Ma position"
             className="absolute z-[500] right-3 bottom-6 w-11 h-11 rounded-full bg-white shadow-lg grid place-items-center" style={{ color: '#1d6fd6' }}>
@@ -448,14 +455,14 @@ export default function PageCarte() {
               </span>
             </div>
           )}
-          {sel && !vueEnsemble && (
+          {sel && (!vueEnsemble || sel.id === bureau?.id) && (
             <div className="absolute z-[600] left-2 right-2 bottom-2 sm:left-3 sm:right-auto sm:w-96 bg-white rounded-xl shadow-xl p-3 space-y-2">
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold" style={{ color: couleurClient(sel.client_id, ordreClients) }}>{clientDe(sel.client_id)?.nom}</div>
                   <div className="font-bold truncate" style={{ color: 'var(--navy)' }}>{sel.nom}</div>
                   <div className="text-xs truncate" style={{ color: 'var(--gray)' }}>
-                    {[sel.commune, selD != null ? fmtDistance(selD) : null].filter(Boolean).join(' · ')}
+                    {[sel.commune, selD != null ? `${fmtDistance(selD)} de vous` : null, depuisBureau(sel) != null ? `${fmtDistance(depuisBureau(sel)!)} du bureau` : null].filter(Boolean).join(' · ')}
                   </div>
                 </div>
                 <button onClick={() => setSelId(null)} className="p-1"><X className="w-4 h-4" style={{ color: 'var(--gray)' }} /></button>
@@ -498,7 +505,9 @@ export default function PageCarte() {
                   {[clientDe(p.client_id)?.nom, p.commune].filter(Boolean).join(' · ')}
                 </div>
               </div>
-              {d != null && <span className="text-sm font-semibold shrink-0" style={{ color: '#1d6fd6' }}>{fmtDistance(d)}</span>}
+              {d != null
+                ? <span className="text-sm font-semibold shrink-0" style={{ color: '#1d6fd6' }}>{fmtDistance(d)}</span>
+                : depuisBureau(p) != null && <span className="text-xs shrink-0 text-right leading-tight" style={{ color: 'var(--gray)' }}>{fmtDistance(depuisBureau(p)!)}<br />du bureau</span>}
               <ChevronRight className="w-4 h-4 shrink-0" style={{ color: 'var(--gray)' }} />
             </button>
           ))}
