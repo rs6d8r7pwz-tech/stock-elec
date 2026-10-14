@@ -21,6 +21,7 @@ export const TECHNICIENS = [
   'Maxime Morel',
   'Romain Durand',
   'Jerome Boulud',
+  'Jeremy Boulud',
   'Bastien Brochier',
   'Richard Besson',
   'Richard Marrel',
