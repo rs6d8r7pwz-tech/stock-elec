@@ -839,10 +839,18 @@ function reessayerCarte() { CARTE.loaded = false; CARTE.error = ''; saveForm(); 
 
 function lieuVerrouille(f) { return !!(f.lieuEnregistre && f.cartePointId); }
 
-function adresseDuPoint(p) {
+// Adresse affichée : « rue, CP commune » ; sans rue → « CP commune » (le village).
+// Jamais de coordonnées : si la commune manque aussi, on la retrouve via geo.api.gouv.fr.
+async function adresseDuPoint(p) {
   const ville = [p.code_postal, p.commune].filter(Boolean).join(' ');
   const txt = [p.adresse, ville].filter(Boolean).join(', ');
-  return txt || ('GPS ' + Number(p.lat).toFixed(6) + ', ' + Number(p.lng).toFixed(6));
+  if (txt) return txt;
+  try {
+    const r = await avecDelai(fetch('https://geo.api.gouv.fr/communes?lat=' + p.lat + '&lon=' + p.lng + '&fields=nom,codesPostaux&format=json'), 8000);
+    const c = (await r.json())[0];
+    if (c && c.nom) return [(c.codesPostaux || [])[0], c.nom].filter(Boolean).join(' ');
+  } catch(e) {}
+  return p.nom;   // dernier recours : le nom du site
 }
 
 function setLieuEnregistre(on) {
@@ -880,9 +888,13 @@ function choisirSiteCarte(id) {
   if (c) { f.client = c.nom; f.carteClientId = String(c.id); }
   f.site = p.nom;
   if (f.modeIntervention === 'distance') { renderApp(); return; }
-  f.adresse = adresseDuPoint(p);
   f.adresseCoords = { lat: Number(p.lat), lon: Number(p.lng) };   // coordonnées exactes du site
-  calculateTrajet(f.adresse);                                      // trajet calculé automatiquement
+  const idChoisi = f.cartePointId;
+  adresseDuPoint(p).then(adr => {
+    if (state.form !== f || f.cartePointId !== idChoisi) return;   // l'utilisateur a changé entre-temps
+    f.adresse = adr;
+    calculateTrajet(f.adresse);                                    // trajet calculé automatiquement
+  });
 }
 
 function renderLieuEnregistre(f) {
