@@ -358,6 +358,24 @@
       display: inline-flex; align-items: center; gap: 6px;
     }
 
+    /* ── LIEU ENREGISTRÉ (Carte ELECTReau) ── */
+    .lieu-enr {
+      border: 1.5px solid var(--border); border-radius: 10px;
+      padding: 10px 12px; margin-bottom: 12px; background: #f8fafc;
+    }
+    .lieu-enr.on { border-color: var(--blue); background: var(--blue-light); }
+    .lieu-enr-check {
+      display: flex; align-items: center; gap: 10px; cursor: pointer;
+      font-size: 14px; font-weight: 700; color: var(--navy);
+      text-transform: none; letter-spacing: 0; margin: 0;
+    }
+    .lieu-enr-check input { width: 20px; height: 20px; accent-color: var(--navy); flex-shrink: 0; }
+    .lieu-enr-body { margin-top: 10px; }
+    .lieu-enr-body .field { margin-bottom: 10px; }
+    .lieu-enr-body select:disabled { background: #f1f5f9; color: var(--gray); }
+    input.auto-carte { background: #f1f5f9; color: var(--navy); font-weight: 600; }
+    .hint-carte { font-weight: 600; text-transform: none; color: var(--blue); letter-spacing: 0; }
+
     /* ── AUTOCOMPLETE ── */
     .ac-wrap { position: relative; flex: 1; }
     .ac-dropdown {
@@ -764,8 +782,152 @@ function setModeIntervention(mode) {
     state.trajetError = null;
     state.form.adresse = '';
     state.form.adresseCoords = null;
+  } else if (lieuVerrouille(state.form)) {
+    // Retour « Sur site » avec un lieu enregistré : on remet l'adresse du site et on recalcule
+    const pt = CARTE.points.find(x => String(x.id) === String(state.form.cartePointId));
+    if (pt) { choisirSiteCarte(pt.id); return; }
   }
   renderApp();
+}
+
+// ============================================================
+// LIEUX ENREGISTRÉS — clients & sites de la Carte ELECTReau
+// (tables Supabase carte_clients / carte_points, partagées avec l'app Carte)
+// ============================================================
+const CARTE_CACHE_BI  = 'electreau_bi_carte_cache_v1';
+const CARTE_CACHE_APP = 'electreau_carte_cache_v1';   // cache de l'app Carte (même domaine)
+let CARTE = { clients: [], points: [], loaded: false, loading: false, error: '', horsLigne: false };
+
+async function sbSelect(table, query) {
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?' + query, {
+    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY }
+  });
+  if (!res.ok) throw new Error('Supabase ' + res.status + ' : ' + (await res.text()));
+  return res.json();
+}
+
+function carteDepuisCache() {
+  for (const k of [CARTE_CACHE_BI, CARTE_CACHE_APP]) {
+    try {
+      const d = JSON.parse(localStorage.getItem(k) || 'null');
+      if (d && Array.isArray(d.clients) && Array.isArray(d.points)) return d;
+    } catch(e) {}
+  }
+  return null;
+}
+
+async function chargerCarte(force) {
+  if (CARTE.loading || (CARTE.loaded && !force)) return;
+  CARTE.loading = true; CARTE.error = '';
+  try {
+    const [clients, points] = await Promise.all([
+      avecDelai(sbSelect('carte_clients', 'select=id,nom&order=nom'), 12000),
+      avecDelai(sbSelect('carte_points', 'select=id,client_id,nom,lat,lng,adresse,commune,code_postal&order=nom'), 12000),
+    ]);
+    CARTE.clients = clients || []; CARTE.points = points || []; CARTE.horsLigne = false;
+    try { localStorage.setItem(CARTE_CACHE_BI, JSON.stringify({ clients: CARTE.clients, points: CARTE.points })); } catch(e) {}
+  } catch(e) {
+    const c = carteDepuisCache();
+    if (c) { CARTE.clients = c.clients; CARTE.points = c.points; CARTE.horsLigne = true; }
+    else CARTE.error = 'Impossible de charger les lieux de la Carte ELECTReau (' + (e.message || e) + ').';
+  }
+  CARTE.loaded = true; CARTE.loading = false;
+  if (state.user && state.view === 'form' && state.step === 1) { saveForm(); renderApp(); }
+}
+
+function reessayerCarte() { CARTE.loaded = false; CARTE.error = ''; saveForm(); renderApp(); }
+
+function lieuVerrouille(f) { return !!(f.lieuEnregistre && f.cartePointId); }
+
+function adresseDuPoint(p) {
+  const ville = [p.code_postal, p.commune].filter(Boolean).join(' ');
+  const txt = [p.adresse, ville].filter(Boolean).join(', ');
+  return txt || ('GPS ' + Number(p.lat).toFixed(6) + ', ' + Number(p.lng).toFixed(6));
+}
+
+function setLieuEnregistre(on) {
+  saveForm();
+  const f = state.form;
+  f.lieuEnregistre = !!on;
+  if (!on) {            // on garde les valeurs déjà remplies, simplement modifiables
+    f.carteClientId = ''; f.cartePointId = '';
+  } else if (!CARTE.loaded) {
+    chargerCarte();
+  }
+  renderApp();
+}
+
+function choisirClientCarte(id) {
+  saveForm();
+  const f = state.form;
+  f.carteClientId = id || '';
+  f.cartePointId = '';
+  const c = CARTE.clients.find(x => String(x.id) === String(id));
+  f.client = c ? c.nom : '';
+  f.site = ''; f.adresse = ''; f.adresseCoords = null;
+  f.km = null; f.trajetMin = null; state.trajetError = null;
+  renderApp();
+}
+
+function choisirSiteCarte(id) {
+  saveForm();
+  const f = state.form;
+  const p = CARTE.points.find(x => String(x.id) === String(id));
+  f.cartePointId = p ? String(p.id) : '';
+  f.km = null; f.trajetMin = null; state.trajetError = null;
+  if (!p) { f.site = ''; f.adresse = ''; f.adresseCoords = null; renderApp(); return; }
+  const c = CARTE.clients.find(x => String(x.id) === String(p.client_id));
+  if (c) { f.client = c.nom; f.carteClientId = String(c.id); }
+  f.site = p.nom;
+  if (f.modeIntervention === 'distance') { renderApp(); return; }
+  f.adresse = adresseDuPoint(p);
+  f.adresseCoords = { lat: Number(p.lat), lon: Number(p.lng) };   // coordonnées exactes du site
+  calculateTrajet(f.adresse);                                      // trajet calculé automatiquement
+}
+
+function renderLieuEnregistre(f) {
+  const on = !!f.lieuEnregistre;
+  let html = '<div class="lieu-enr' + (on ? ' on' : '') + '">'
+    + '<label class="lieu-enr-check"><input type="checkbox" ' + (on ? 'checked ' : '')
+    +   'onchange="setLieuEnregistre(this.checked)"> 📌 Lieu enregistré <span style="font-weight:500;color:var(--gray)">(Carte ELECTReau)</span></label>';
+  if (!on) return html + '</div>';
+
+  html += '<div class="lieu-enr-body">';
+  if (!CARTE.loaded || CARTE.loading) {
+    if (!CARTE.loading) chargerCarte();
+    return html + '<div class="info-box">⏳ Chargement des clients et sites…</div></div></div>';
+  }
+  if (CARTE.error) {
+    return html + '<div class="note" style="margin-top:0">⚠️ ' + esc(CARTE.error)
+      + ' <button type="button" class="btn-primary" style="padding:6px 10px;font-size:12px;margin-left:6px" onclick="reessayerCarte()">Réessayer</button></div></div></div>';
+  }
+
+  // Clients ayant au moins un site enregistré
+  const nb = {};
+  CARTE.points.forEach(p => { nb[p.client_id] = (nb[p.client_id] || 0) + 1; });
+  const clients = CARTE.clients.filter(c => nb[c.id]);
+  if (!clients.length) {
+    return html + '<div class="info-box">Aucun site enregistré pour l\'instant dans la Carte ELECTReau.</div></div></div>';
+  }
+  const optsC = '<option value="">— Choisir un client —</option>'
+    + clients.map(c => '<option value="' + esc(c.id) + '"' + (String(c.id) === String(f.carteClientId) ? ' selected' : '') + '>'
+      + esc(c.nom) + ' (' + nb[c.id] + ' site' + (nb[c.id] > 1 ? 's' : '') + ')</option>').join('');
+
+  const sites = f.carteClientId ? CARTE.points.filter(p => String(p.client_id) === String(f.carteClientId)) : [];
+  const optsS = '<option value="">' + (f.carteClientId ? '— Choisir un site —' : '— Choisir d\'abord un client —') + '</option>'
+    + sites.map(p => '<option value="' + esc(p.id) + '"' + (String(p.id) === String(f.cartePointId) ? ' selected' : '') + '>'
+      + esc(p.nom) + (p.commune ? ' — ' + esc(p.commune) : '') + '</option>').join('');
+
+  html += '<div class="field-row">'
+    +   '<div class="field"><label>Client enregistré</label><select onchange="choisirClientCarte(this.value)">' + optsC + '</select></div>'
+    +   '<div class="field"><label>Site</label><select onchange="choisirSiteCarte(this.value)"' + (f.carteClientId ? '' : ' disabled') + '>' + optsS + '</select></div>'
+    + '</div>';
+
+  if (f.carteClientId && f.cartePointId && !sites.some(p => String(p.id) === String(f.cartePointId))) {
+    html += '<div class="note" style="margin-top:0">⚠️ Ce site n\'existe plus dans la Carte ELECTReau. Choisissez-en un autre ou décochez la case.</div>';
+  }
+  if (CARTE.horsLigne) html += '<div style="font-size:12px;color:var(--gray)">📴 Hors ligne : dernière liste connue des lieux.</div>';
+  return html + '</div></div>';
 }
 
 function renderLieuBlock(f) {
@@ -788,6 +950,7 @@ function renderLieuBlock(f) {
     +     '<input type="text" id="adresse" value="' + esc(f.adresse) + '" '
     +       'placeholder="Ex: Creys-Mépieu, mairie de Morestel, 3 chemin des…" '
     +       'style="width:100%" required autocomplete="off" '
+    +       (lieuVerrouille(f) ? 'readonly class="auto-carte" title="Adresse du site enregistré (Carte ELECTReau)" ' : '')
     +       'oninput="onAdresseInput(this.value)" '
     +       'onblur="setTimeout(()=>closeAcDropdown(),180)">'
     +     '<div class="ac-dropdown" id="ac-dropdown" style="display:none"></div>'
@@ -896,6 +1059,9 @@ function newForm() {
     date:           today(),
     client:         '',
     site:           '',     // nom du site / installation (ex: PR La Tour du Pin)
+    lieuEnregistre: false,  // true = client/site/adresse pris dans la Carte ELECTReau
+    carteClientId:  '',     // id carte_clients
+    cartePointId:   '',     // id carte_points
     adresse:        '',
     modeIntervention: 'site',  // 'site' | 'distance'
     heureArrivee:   '',
@@ -1599,8 +1765,8 @@ function renderForm() {
         </div>
         <div class="field-row">
           <div class="field">
-            <label>Client *</label>
-            <input type="text" id="client" value="${esc(f.client)}" placeholder="Nom du client ou société" required>
+            <label>Client *${lieuVerrouille(f) ? ' <span class="hint-carte">📌 carte</span>' : ''}</label>
+            <input type="text" id="client" value="${esc(f.client)}" placeholder="Nom du client ou société" required${lieuVerrouille(f) ? ' readonly class="auto-carte" title="Rempli depuis la Carte ELECTReau (décochez « Lieu enregistré » pour modifier)"' : ''}>
           </div>
           <div class="field">
             <label>N° de bon</label>
@@ -1608,8 +1774,8 @@ function renderForm() {
           </div>
         </div>
         <div class="field">
-          <label>Nom du site <span style="font-weight:600;text-transform:none;color:var(--gray)">— ex : PR La Tour du Pin</span></label>
-          <input type="text" id="site" value="${esc(f.site)}" placeholder="Ex: PR La Tour du Pin, station de pompage…">
+          <label>Nom du site ${lieuVerrouille(f) ? '<span class="hint-carte">📌 rempli depuis la Carte ELECTReau</span>' : '<span style="font-weight:600;text-transform:none;color:var(--gray)">— ex : PR La Tour du Pin</span>'}</label>
+          <input type="text" id="site" value="${esc(f.site)}" placeholder="Ex: PR La Tour du Pin, station de pompage…"${lieuVerrouille(f) ? ' readonly class="auto-carte"' : ''}>
         </div>
         <div class="field">
           <label>Nom du bon * <span style="font-weight:600;text-transform:none;color:var(--gray)">— pour le retrouver dans les archives</span></label>
@@ -1619,6 +1785,7 @@ function renderForm() {
 
       <div class="card">
         <div class="card-title">📍 Lieu &amp; horaires</div>
+        ${renderLieuEnregistre(f)}
         <div class="field">
           <div class="toggle-group" style="margin-bottom:12px">
             <button type="button" class="toggle-btn ${f.modeIntervention!=='distance'?'active':''}" onclick="setModeIntervention('site')">🏠 Sur site</button>
