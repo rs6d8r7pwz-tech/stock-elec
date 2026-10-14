@@ -183,6 +183,7 @@
 
     /* ── TOGGLE ── */
     .toggle-group { display: flex; gap: 6px; }
+    @media (max-width: 480px) { .toggle-group { flex-wrap: wrap; } .toggle-group .toggle-btn { flex: 1 1 calc(50% - 6px); } }
     .toggle-btn {
       flex: 1; padding: 10px;
       border: 1.5px solid var(--border); border-radius: 9px;
@@ -683,18 +684,169 @@ async function getDepartCoords() {
   const mode = state.form.departMode || 'bureau';
   if (mode === 'gps' && state.form.departGpsCoords) return state.form.departGpsCoords;
   if (mode === 'adresse' && state.form.departCustomCoords) return state.form.departCustomCoords;
+  if (mode === 'domicile') {
+    const d = await domicileCoords();
+    if (d) return d;
+    throw new Error('Domicile non renseigné : saisissez votre adresse dans « Point de départ ».');
+  }
   if (!CONFIG.departCoords) await initDepartCoords();
   return CONFIG.departCoords;
 }
 
 async function setDepartMode(mode) {
   saveForm();
+  const avant = state.form.departMode;
   state.form.departMode = mode;
   if (mode === 'gps' && !state.form.departGpsCoords) {
     await fetchGpsCoords();
   } else {
+    if (mode === 'domicile' && !DOMICILE.loaded) chargerDomicile();
     renderApp();
   }
+  // Trajet déjà calculé : on le refait avec le nouveau point de départ
+  if (avant !== mode) recalculerTrajetSiBesoin();
+}
+
+function recalculerTrajetSiBesoin() {
+  const f = state.form;
+  if (f.modeIntervention === 'distance' || !f.adresse || state.isLoadingTrajet) return;
+  if (f.km === null && !f.adresseCoords) return;
+  if (f.departMode === 'domicile' && !DOMICILE.adresse) { f.km = null; f.trajetMin = null; renderApp(); return; }
+  if (f.departMode === 'adresse' && !f.departCustomCoords) return;
+  if (f.departMode === 'gps' && !f.departGpsCoords) return;
+  calculateTrajet(f.adresse);
+}
+
+// ============================================================
+// DOMICILE du technicien connecté (table Supabase tech_domiciles,
+// via les fonctions domicile_get / domicile_set — voir supabase/domiciles.sql)
+// ============================================================
+const DOMICILE_LS = 'electreau_domicile_v1:';
+let DOMICILE = { user: null, adresse: '', coords: null, loaded: false, loading: false, error: '', edit: false, saving: false };
+
+function domicileReset() {
+  DOMICILE = { user: state.user, adresse: '', coords: null, loaded: false, loading: false, error: '', edit: false, saving: false };
+  try {
+    const c = JSON.parse(localStorage.getItem(DOMICILE_LS + state.user) || 'null');
+    if (c && c.adresse) { DOMICILE.adresse = c.adresse; DOMICILE.coords = c.coords || null; }
+  } catch(e) {}
+}
+
+function domicileCache() {
+  try { localStorage.setItem(DOMICILE_LS + DOMICILE.user, JSON.stringify({ adresse: DOMICILE.adresse, coords: DOMICILE.coords })); } catch(e) {}
+}
+
+async function chargerDomicile() {
+  if (!state.user) return;
+  if (DOMICILE.user !== state.user) domicileReset();
+  if (DOMICILE.loading) return;
+  DOMICILE.loading = true; DOMICILE.error = '';
+  try {
+    const rows = await avecDelai(sbRpc('domicile_get', { p_nom: state.user }), 10000);
+    const r = Array.isArray(rows) ? rows[0] : rows;
+    if (r && r.adresse) {
+      DOMICILE.adresse = r.adresse;
+      DOMICILE.coords = (r.lat != null && r.lon != null) ? { lat: r.lat, lon: r.lon } : null;
+    } else if (!DOMICILE.adresse) {
+      DOMICILE.edit = true;       // pas encore de domicile : on propose la saisie
+    }
+    domicileCache();
+  } catch(e) {
+    if (!DOMICILE.adresse) DOMICILE.error = 'Domicile indisponible (' + (e.message || e) + ').';
+  }
+  DOMICILE.loaded = true; DOMICILE.loading = false;
+  if (state.view === 'form' && state.step === 1) { saveForm(); renderApp(); }
+  if (state.form && state.form.departMode === 'domicile') recalculerTrajetSiBesoin();
+}
+
+async function domicileCoords() {
+  if (DOMICILE.user !== state.user || !DOMICILE.loaded) await chargerDomicile();
+  if (!DOMICILE.adresse) return null;
+  if (!DOMICILE.coords) {
+    try {
+      const g = await geocode(DOMICILE.adresse);
+      DOMICILE.coords = { lat: g.lat, lon: g.lon };
+      domicileCache();
+    } catch(e) { return null; }
+  }
+  return DOMICILE.coords;
+}
+
+function modifierDomicile(on) {
+  saveForm();
+  DOMICILE.edit = !!on;
+  renderApp();
+  if (on) setTimeout(() => document.getElementById('domicile-input')?.focus(), 50);
+}
+
+let domAcTimer = null;
+function onDomicileInput(val) {
+  clearTimeout(domAcTimer);
+  const dd = document.getElementById('domicile-ac-dropdown');
+  if (val.length < 3) { if (dd) dd.style.display = 'none'; return; }
+  domAcTimer = setTimeout(async () => {
+    const feats = await banSearch(val, { limit: 5 }).catch(() => []);
+    const d = document.getElementById('domicile-ac-dropdown');
+    if (!d) return;
+    if (!feats.length) { d.style.display = 'none'; return; }
+    d.innerHTML = feats.map((ft, i) =>
+      '<div class="ac-item" onmousedown="choisirDomicile(' + i + ')">'
+      + '<div class="ac-item-main">' + esc(ft.properties.label) + '</div>'
+      + '<div class="ac-item-sub">' + esc(ft.properties.context || '') + '</div></div>'
+    ).join('');
+    d.style.display = 'block';
+    d._feats = feats;
+  }, 300);
+}
+
+async function choisirDomicile(i) {
+  const dd = document.getElementById('domicile-ac-dropdown');
+  if (!dd || !dd._feats || !dd._feats[i]) return;
+  const ft = dd._feats[i];
+  dd.style.display = 'none';
+  saveForm();
+  const adresse = ft.properties.label;
+  const coords = { lat: ft.geometry.coordinates[1], lon: ft.geometry.coordinates[0] };
+  DOMICILE.saving = true; DOMICILE.error = '';
+  renderApp();
+  try {
+    const ok = await avecDelai(sbRpc('domicile_set', { p_nom: state.user, p_adresse: adresse, p_lat: coords.lat, p_lon: coords.lon }), 10000);
+    if (ok === false) throw new Error('refusé');
+    DOMICILE.adresse = adresse; DOMICILE.coords = coords; DOMICILE.edit = false; DOMICILE.loaded = true;
+    domicileCache();
+  } catch(e) {
+    DOMICILE.error = "Enregistrement impossible (" + (e.message || e) + "). Réessayez avec du réseau.";
+  }
+  DOMICILE.saving = false;
+  renderApp();
+  recalculerTrajetSiBesoin();
+}
+
+function renderDomicileInfo() {
+  if (DOMICILE.user !== state.user || (!DOMICILE.loaded && !DOMICILE.loading)) chargerDomicile();
+  if (DOMICILE.saving) return '<div class="badge loading" style="margin-top:8px">💾 Enregistrement du domicile…</div>';
+  let html = '';
+  if (DOMICILE.error) html += '<div class="note" style="margin-top:8px">⚠️ ' + esc(DOMICILE.error) + '</div>';
+  if (!DOMICILE.adresse && !DOMICILE.loaded) return html + '<div class="badge loading" style="margin-top:8px">⏳ Chargement de votre domicile…</div>';
+  if (DOMICILE.adresse && !DOMICILE.edit) {
+    return html + '<div class="info-box" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">'
+      + '<span>🏠 ' + esc(DOMICILE.adresse) + '</span>'
+      + '<button type="button" onclick="modifierDomicile(true)" style="background:none;border:none;color:var(--blue);cursor:pointer;text-decoration:underline;font-size:12px;white-space:nowrap">Modifier</button></div>';
+  }
+  return html + '<div style="font-size:12px;color:var(--gray);margin-top:8px">'
+    + (DOMICILE.adresse ? 'Nouvelle adresse de domicile :' : 'Indiquez votre adresse de domicile (enregistrée une seule fois pour votre compte) :') + '</div>'
+    + '<div class="ac-wrap" style="margin-top:4px">'
+    + '<input type="text" id="domicile-input" placeholder="Ex : 12 rue de la Paix, 38300 Bourgoin" autocomplete="off" oninput="onDomicileInput(this.value)"'
+    + ' onblur="setTimeout(()=>{const d=document.getElementById(\'domicile-ac-dropdown\');if(d)d.style.display=\'none\'},180)">'
+    + '<div id="domicile-ac-dropdown" class="ac-dropdown" style="display:none"></div></div>'
+    + (DOMICILE.adresse ? '<button type="button" onclick="modifierDomicile(false)" style="background:none;border:none;color:var(--gray);cursor:pointer;text-decoration:underline;font-size:12px;margin-top:4px">Annuler</button>' : '');
+}
+
+function libelleDepart(f) {
+  if (f.departMode === 'domicile') return DOMICILE.adresse ? '🏠 ' + DOMICILE.adresse : '🏠 Domicile';
+  if (f.departMode === 'gps') return '📍 Ma position';
+  if (f.departMode === 'adresse') return f.departCustomAddress || 'Adresse';
+  return CONFIG.departAddress;
 }
 
 async function fetchGpsCoords() {
@@ -753,6 +905,7 @@ function hideDepartAc() {
 }
 
 function renderDepartInfo(f) {
+  if (f.departMode === 'domicile') return renderDomicileInfo();
   if (f.departMode === 'gps') {
     if (state.isLoadingGps) return '<div class="badge loading">📍 Localisation en cours…</div>';
     if (f.departGpsCoords) return '<div class="badge success-green">✓ Position GPS obtenue</div>';
@@ -954,7 +1107,7 @@ function renderLieuBlock(f) {
   } else if (state.trajetError) {
     trajet = '<span class="badge error">⚠️ ' + esc(state.trajetError) + '</span>';
   } else {
-    trajet = '<span style="font-size:12px;color:var(--gray);margin-top:6px;">Départ : ' + esc(CONFIG.departAddress) + '</span>';
+    trajet = '<span style="font-size:12px;color:var(--gray);margin-top:6px;">Départ : ' + esc(libelleDepart(f)) + '</span>';
   }
   return '<label>Adresse d\'intervention *</label>'
     + '<div style="display:flex;gap:8px;align-items:flex-start">'
@@ -1086,7 +1239,7 @@ function newForm() {
     trajetMin:      null,   // minutes aller-retour calculés
     dureeSiteMin:   null,   // minutes sur site calculées
     adresseCoords:  null,   // {lat, lon} quand sélection autocomplétion
-    departMode:     'bureau',   // 'bureau' | 'gps' | 'adresse'
+    departMode:     'bureau',   // 'bureau' | 'domicile' | 'gps' | 'adresse'
     departGpsCoords: null,
     departCustomAddress: '',
     departCustomCoords: null,
@@ -1758,6 +1911,7 @@ function renderForm() {
         <div class="field">
           <div class="toggle-group">
             <button type="button" class="toggle-btn ${f.departMode==='bureau'?'active':''}" onclick="setDepartMode('bureau')">🏢 Bureau</button>
+            <button type="button" class="toggle-btn ${f.departMode==='domicile'?'active':''}" onclick="setDepartMode('domicile')">🏠 Domicile</button>
             <button type="button" class="toggle-btn ${f.departMode==='gps'?'active':''}" onclick="setDepartMode('gps')">📍 Ma position</button>
             <button type="button" class="toggle-btn ${f.departMode==='adresse'?'active':''}" onclick="setDepartMode('adresse')">✏️ Adresse</button>
           </div>
