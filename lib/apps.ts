@@ -83,6 +83,7 @@ const ACCESS: Record<string, string[]> = {
   'Maxime Morel':     ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
   'Bastien Brochier': ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
   'Richard Besson':   ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
+  'Jeremy Boulud':    ['bon_intervention', 'notes_frais', 'rapport', 'carte'],
 }
 
 export function appsFor(nom: string | null): AppDef[] {
