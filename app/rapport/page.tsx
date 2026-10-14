@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft, CheckCircle2, ChevronRight, FileText, MoreVertical, RefreshCw, Search, WifiOff,
   Cloud, CloudOff, History, AlertTriangle, PencilLine, ClipboardList, Download, X, Play, Plus,
-  Pencil, Trash2, Eye,
+  Pencil, Trash2, Eye, Navigation,
 } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 import { CLIENTS, getClient } from '@/lib/rapport/clients'
@@ -17,6 +17,8 @@ import {
 } from '@/lib/rapport/store'
 import { urlToDataUrl } from '@/components/rapport/photos'
 import Saisie from '@/components/rapport/Saisie'
+import BoutonsGps from '@/components/carte/BoutonsGps'
+import { usePointsCarte } from '@/lib/rapport/gps'
 
 type Vue =
   | { n: 'accueil' }
@@ -52,6 +54,9 @@ export default function PageRapport() {
 
   const client: ClientDef = getClient(clientId) || CLIENTS[0]
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200) }
+  // Points GPS de la Carte ELECTReau (bouton « Y aller »)
+  const pointsGps = usePointsCarte(client)
+  const [gpsSite, setGpsSite] = useState<string | null>(null)
 
   // Navigation avec le bouton « retour » du téléphone
   const go = useCallback((v: Vue) => {
@@ -309,7 +314,7 @@ export default function PageRapport() {
     const t = tAffichee
     if (!t || !site || !user) return null
     return (
-      <Saisie key={site.id + t.id} site={site} tourneeId={t.id} user={user} hist={hist} existant={releves[site.id]} rang={rang}
+      <Saisie key={site.id + t.id} site={site} tourneeId={t.id} user={user} hist={hist} existant={releves[site.id]} rang={rang} point={pointsGps[site.id]}
         onAnnuler={() => { charger(clientId, mode); window.history.back() }}
         onSauver={async (r) => {
           const ancien = releves[site.id]
@@ -417,10 +422,12 @@ export default function PageRapport() {
               const r = releves[s.id]
               const al = r ? alertesReleve(s.fields, r, hist, rang) : []
               const draft = brouillons[s.id]
+              const pt = pointsGps[s.id]
               return (
-                <button key={s.id} onClick={() => ouvrirSite(s.id)}
-                  className="w-full text-left bg-white rounded-xl border px-4 py-3 flex items-center gap-3 hover:shadow-md transition-shadow"
+                <div key={s.id} className="flex items-stretch rounded-xl border overflow-hidden hover:shadow-md transition-shadow"
                   style={{ borderColor: r ? '#bbf7d0' : 'var(--border)', background: r ? '#f7fef9' : 'white' }}>
+                <button onClick={() => ouvrirSite(s.id)}
+                  className="flex-1 min-w-0 text-left px-4 py-3 flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
                     style={{ background: r ? 'var(--success)' : draft ? '#fef3c7' : 'var(--blue-light)' }}>
                     {r ? <CheckCircle2 className="w-5 h-5 text-white" /> : draft ? <PencilLine className="w-4 h-4" style={{ color: 'var(--warning)' }} /> : <span className="text-xs font-bold" style={{ color: 'var(--navy)' }}>{s.fields.length}</span>}
@@ -445,6 +452,14 @@ export default function PageRapport() {
                   )}
                   <ChevronRight className="w-4 h-4 shrink-0" style={{ color: '#cbd5e1' }} />
                 </button>
+                {pt && (
+                  <button onClick={() => setGpsSite(s.id)} aria-label={`Y aller : ${s.nom}`} title="Y aller (GPS)"
+                    className="shrink-0 w-14 flex flex-col items-center justify-center gap-0.5 border-l text-[10px] font-semibold active:bg-sky-50"
+                    style={{ borderColor: r ? '#bbf7d0' : 'var(--border)', color: 'var(--blue)' }}>
+                    <Navigation className="w-5 h-5" /> Y aller
+                  </button>
+                )}
+                </div>
               )
             })}
           </div>
@@ -472,6 +487,23 @@ export default function PageRapport() {
           }} />
       )}
 
+      {gpsSite && pointsGps[gpsSite] && (() => {
+        const s = sites.find((x) => x.id === gpsSite)!
+        const pt = pointsGps[gpsSite]
+        return (
+          <Modal titre={<><Navigation className="w-5 h-5" /> Y aller</>} onClose={() => setGpsSite(null)}>
+            <div className="text-sm" style={{ color: 'var(--navy)' }}>
+              <div className="font-semibold">{s.nom}</div>
+              <div style={{ color: 'var(--gray)' }}>
+                {[pt.adresse, [pt.code_postal, pt.commune].filter(Boolean).join(' ')].filter(Boolean).join(', ') || s.commune}
+                {pt.nom !== s.nom && <> · point Carte « {pt.nom} »</>}
+              </div>
+            </div>
+            <BoutonsGps lat={pt.lat} lng={pt.lng} nom={s.nom} />
+          </Modal>
+        )
+      })()}
+
       {toast && <Toast msg={toast} />}
     </div>
   )
@@ -494,7 +526,7 @@ function MenuItem({ icon, label, onClick, strong, disabled, danger }: { icon: Re
   )
 }
 
-function Modal({ titre, children, onClose }: { titre: string; children: React.ReactNode; onClose: () => void }) {
+function Modal({ titre, children, onClose }: { titre: React.ReactNode; children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
