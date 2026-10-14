@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, ArrowRight, SkipForward, Camera, ImagePlus, X, Clock, Save, AlertTriangle,
-  CheckCircle2, Info, Pencil, Trash2,
+  CheckCircle2, Info, Pencil, Trash2, Navigation,
 } from 'lucide-react'
 import type { Brouillon, FieldDef, Niveau, Releve, SiteDef, Valeur } from '@/lib/rapport/types'
 import { evaluer, fmtDate, fmtNum, fmtValeur, isIndex, parseSaisie } from '@/lib/rapport/rules'
 import { getBrouillon, setBrouillon, delBrouillon, setPhoto, getPhoto, delPhoto, uid } from '@/lib/rapport/store'
 import { compresserPhoto, toLocalInput, fromLocalInput } from './photos'
+import BoutonsGps from '@/components/carte/BoutonsGps'
+import type { CartePoint } from '@/lib/carte/types'
 
 const SUGGESTIONS = [
   'RAS', 'Pression ballon OK', 'Appoint ballon', 'UV en défaut', 'Lampe UV HS', 'Réétalonnage sonde chlore',
@@ -38,11 +40,13 @@ interface Props {
   existant?: Releve
   /** rang chronologique du rapport (les écarts se calculent sur le rapport terminé précédent) */
   rang?: number
+  /** point GPS de l'ouvrage dans la Carte ELECTReau (bouton « Y aller ») */
+  point?: CartePoint
   onAnnuler: () => void
   onSauver: (r: Omit<Releve, 'id' | 'tournee_id' | 'client' | 'saved_at'> & { id?: string }) => Promise<void>
 }
 
-export default function Saisie({ site, tourneeId, user, hist, existant, rang, onAnnuler, onSauver }: Props) {
+export default function Saisie({ site, tourneeId, user, hist, existant, rang, point, onAnnuler, onSauver }: Props) {
   const fields = site.fields
   const N = fields.length
   const STEP_OBS = N + 1, STEP_RECAP = N + 2
@@ -195,6 +199,14 @@ export default function Saisie({ site, tourneeId, user, hist, existant, rang, on
             <div className="text-sm rounded-xl p-4" style={{ background: 'var(--blue-light)', color: 'var(--navy)' }}>
               <div className="font-semibold mb-1">{site.nom}</div>{site.description}
               <div className="mt-2 text-xs" style={{ color: 'var(--gray)' }}>{N} point{N > 1 ? 's' : ''} de relevé</div>
+            </div>
+          )}
+          {point && (
+            <div className="rounded-xl border p-4 space-y-3 bg-white" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--navy)' }}>
+                <Navigation className="w-4 h-4" /> Y aller
+              </div>
+              <BoutonsGps lat={point.lat} lng={point.lng} nom={site.nom} compact />
             </div>
           )}
         </div>
