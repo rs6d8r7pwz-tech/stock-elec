@@ -45,6 +45,11 @@ const LIENS: Record<string, Record<string, string>> = {
     secto_colombe_pabd_ouest: 'PABD OUEST',
     secto_oyeu_montfollet: 'SECTO MONTFOLLET',
     secto_le_grand_lemps_chartreuse: 'SECTO CHARTREUSE',
+    // confirmés par Bastien le 14/10/2026
+    lemps_lac: 'Forage du Lac',
+    apprieu_cattin: 'Pompage de Planche Cattin',
+    secto_colombe_interco_lgl: 'INTERO LGL COLOMBE',
+    secto_chabons_bois_vert: 'SECTO BOIS VERT',
   },
   ccbe_eu: {
     pr_paulbert: 'PR Paul Bert',
@@ -67,6 +72,7 @@ const LIENS: Record<string, Record<string, string>> = {
     dotrim_plancecattin: 'D.O Planche Cattin',
     dotrim_lgl_est: 'DO LGL EST',
     dotrim_lgl_ouest: 'DO LGL OUEST',
+    step_beaucroissant: 'PR STEP Beaucroissant', // confirmé le 14/10/2026
   },
 }
 
